@@ -486,7 +486,7 @@ const HEROES = {
   magier: { name: 'Magier', icon: '🔮', unlock: 12, weapons: ['staff'], hair: '#2a4aa8', desc: 'Stärkere Geschosse und Zauber mit Stäben.', bonus: l => ({ dmgp: 20 + l * 2, spellp: 30 + l * 3, manaRegen: 3, cdr: 10 }) },
   berserker: { name: 'Berserker', icon: '🪓', unlock: 14, weapons: ['axe', 'hammer'], hair: '#b8401a', desc: 'Wucht und Lebensraub mit Äxten und Hämmern.', bonus: l => ({ dmgp: 25 + Math.round(l * 2.5), hpp: 10, lifesteal: +(.02 + l * .001).toFixed(3) }) },
 };
-const heroXpNeed = l => Math.round(30 * Math.pow(l, 1.4));
+const heroXpNeed = l => Math.round(60 * Math.pow(l, 1.45));
 const heroFits = (hid, wtype) => { const H = HEROES[hid]; return H.weapons === 'all' || H.weapons.includes(wtype); };
 
 /* =====================================================================
@@ -516,7 +516,7 @@ const Profile = {
     Sound.setVol(d.settings.vol);
   },
   save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); } catch (e) {} },
-  xpNeed(l) { return Math.round(40 * Math.pow(l, 1.45)); },
+  xpNeed(l) { return Math.round(150 * Math.pow(l, 1.6)); }, // langsamer Fortschritt: das Spiel soll lange halten
   heroUnlocked(k) { return this.data.level >= HEROES[k].unlock; },
   hero() { return this.data.heroes[this.data.hero]; },
   addHeroXp(n) { const h = this.hero(); let ups = 0; if (h.lvl >= HERO_MAX) return 0; h.xp += n; while (h.lvl < HERO_MAX && h.xp >= heroXpNeed(h.lvl)) { h.xp -= heroXpNeed(h.lvl); h.lvl++; ups++; } if (h.lvl >= HERO_MAX) h.xp = 0; return ups; },
@@ -641,6 +641,7 @@ function unlocksBetween(from, to) {
   for (const U of Object.values(UNLOCKS)) if (U.lvl > from && U.lvl <= to) out.push({ lvl: U.lvl, name: U.name });
   for (const D of DUNGEONS) if (D.unlock > from && D.unlock <= to) out.push({ lvl: D.unlock, name: 'Dungeon: ' + D.name });
   for (const H of Object.values(HEROES)) if (H.unlock > from && H.unlock <= to) out.push({ lvl: H.unlock, name: 'Held: ' + H.icon + ' ' + H.name });
+  for (const F of DIFFS) if (F.minLvl > from && F.minLvl <= to) out.push({ lvl: F.minLvl, name: 'Schwierigkeit ' + F.n + ' (wenn die vorige geschafft ist)' });
   return out.sort((a, b) => a.lvl - b.lvl);
 }
 const nextUnlock = () => { const l = Profile.data.level; return unlocksBetween(l, 99)[0] || null; };
@@ -684,11 +685,11 @@ const DUNGEONS = [
 const DUNGEON_BY = Object.fromEntries(DUNGEONS.map(d => [d.id, d]));
 // Stufe I–V: Gegnerstärke, Loot-Bonus und Sterne der Artefakte (Gewichte für 2★–5★)
 const DIFFS = [
-  { n: 'I', mult: 1, loot: 0, stars: { 2: 70, 3: 30 } },
-  { n: 'II', mult: 1.45, loot: .25, stars: { 2: 15, 3: 65, 4: 20 } },
-  { n: 'III', mult: 2.1, loot: .5, stars: { 3: 45, 4: 47, 5: 8 } },
-  { n: 'IV', mult: 3, loot: .8, stars: { 3: 10, 4: 65, 5: 25 } },
-  { n: 'V', mult: 4.2, loot: 1.2, stars: { 4: 45, 5: 55 } },
+  { n: 'I', minLvl: 1, mult: 1, loot: 0, stars: { 2: 70, 3: 30 } },
+  { n: 'II', minLvl: 6, mult: 1.45, loot: .25, stars: { 2: 15, 3: 65, 4: 20 } },
+  { n: 'III', minLvl: 10, mult: 2.1, loot: .5, stars: { 3: 45, 4: 47, 5: 8 } },
+  { n: 'IV', minLvl: 14, mult: 3, loot: .8, stars: { 3: 10, 4: 65, 5: 25 } },
+  { n: 'V', minLvl: 18, mult: 4.2, loot: 1.2, stars: { 4: 45, 5: 55 } },
 ];
 /* ---------- Balance: Ausrüstungsstufe & Gegnerstärke ----------
    Ausrüstungsstufe 1–20: Schwierigkeit I = Stufe 1–4 (je 2 Stages eine Stufe höher), II = 5–8, III = 9–12, IV = 13–16, V = 17–20.
@@ -2736,7 +2737,7 @@ const UI = {
   dungeons(selId) {
     const d = Profile.data, cur = DUNGEON_BY[selId || this.dsel || 'krypta'] || DUNGEONS[0]; this.dsel = cur.id;
     const open = D => d.level >= D.unlock, cl = d.dclear[cur.id] || 0, S = ART_SETS[cur.set], B = BOSSES[cur.boss];
-    const want = Math.min(this.diffSel != null && this.dselFor === cur.id ? this.diffSel : cl, 4), diff = Math.min(want, cl);
+    const maxOk = Math.min(cl, 4, DIFFS.filter(F => d.level >= F.minLvl).length - 1), want = Math.min(this.diffSel != null && this.dselFor === cur.id ? this.diffSel : maxOk, 4), diff = Math.min(want, maxOk);
     const tag = (txt, col) => `<span style="display:inline-block;padding:3px 6px;border:2px solid ${col};color:${col};font-size:8px;margin:2px 2px 0 0">${txt}</span>`;
     uiRoot.innerHTML = `<div class="screen">${this.topbar('Dungeon wählen')}
       <div class="row" style="align-items:stretch;justify-content:center;width:min(1100px,100%);flex-wrap:nowrap">
@@ -2762,9 +2763,9 @@ const UI = {
       b.appendChild(cv); b.insertAdjacentHTML('beforeend', `<span style="font-size:9px;line-height:1.6"><span style="color:${D.id === cur.id ? '#fff' : SC}">${esc(D.name)}</span><br><span class="muted" style="font-size:8px">${ok ? (c ? 'bis Stufe ' + DIFFS[Math.min(c, 4)].n : 'Stufe I') : '🔒 ab Konto-Level ' + D.unlock}</span></span>`);
       b.onclick = () => { sfx('click'); this.diffSel = null; this.show('dungeons', D.id); }; L.appendChild(b); }
     const T2 = document.getElementById('dtable');
-    DIFFS.forEach((F, i) => { const ok = open(cur) && i <= cl, sel = i === diff, done = i < cl, row = document.createElement('button');
+    DIFFS.forEach((F, i) => { const lvOk = d.level >= F.minLvl, ok = open(cur) && i <= cl && lvOk, sel = i === diff, done = i < cl, row = document.createElement('button');
       row.className = 'btn small' + (sel ? ' gold' : ''); row.disabled = !ok; row.style.cssText = 'display:flex;align-items:center;gap:10px;text-align:left;width:100%;padding:6px 10px';
-      row.innerHTML = `<span style="font-size:12px;width:34px;flex:none">${F.n}</span><span style="flex:1;line-height:1.5">${tag('Ausrüstung ' + tierRange(i), '#9ad0ff')}${tag('Artefakte ' + Object.keys(F.stars).join('/') + '★', STAR_COL[Math.max(...Object.keys(F.stars).map(Number))])}${tag('Gegner ' + ['leicht', 'mittel', 'schwer', 'sehr schwer', 'extrem'][i], ['#5fd068', '#f4d03f', '#ff9a3c', '#ff4a3a', '#d040ff'][i])}</span><span style="flex:none;font-size:9px">${done ? '✓' : ok ? '' : '🔒'}</span>`;
+      row.innerHTML = `<span style="font-size:12px;width:34px;flex:none">${F.n}</span><span style="flex:1;line-height:1.5">${tag('Ausrüstung ' + tierRange(i), '#9ad0ff')}${tag('Artefakte ' + Object.keys(F.stars).join('/') + '★', STAR_COL[Math.max(...Object.keys(F.stars).map(Number))])}${tag('Gegner ' + ['leicht', 'mittel', 'schwer', 'sehr schwer', 'extrem'][i], ['#5fd068', '#f4d03f', '#ff9a3c', '#ff4a3a', '#d040ff'][i])}</span><span style="flex:none;font-size:9px">${done ? '✓' : ok ? '' : '🔒'}${!lvOk ? ' Lv ' + F.minLvl : ''}</span>`;
       row.onclick = () => { sfx('click'); this.diffSel = i; this.dselFor = cur.id; this.show('dungeons', cur.id); }; T2.appendChild(row); });
     const go = document.getElementById('bGoRun'); go.disabled = !open(cur);
     go.onclick = () => { sfx('click'); this.sel = { dungeon: cur.id, diff }; this.show('party', true); };
