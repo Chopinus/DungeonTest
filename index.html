@@ -248,7 +248,8 @@ function heroSprite(look, frame) {
   const k = [look.helm, look.chest, look.pants, look.boots, look.skin || 0].join(',');
   const A = ARMOR_COL[look.chest] || ARMOR_COL.none, H = ARMOR_COL[look.helm] || ['#6a4a2a', '#4a3020'], P = ARMOR_COL[look.pants] || ['#3a3048', '#2a2236'], F = ARMOR_COL[look.boots] || ['#4a3020', '#2a1a10'];
   const skins = ['#e0b088', '#c08a5a', '#8a5a3a', '#f0c8a0'];
-  return sprite(frame ? 'hero2' : 'hero', { A: A[0], a: A[1], H: look.helm ? H[0] : '#5a3a20', P: P[0], F: F[1], s: skins[look.skin || 0] }, k);
+  const hair = (typeof HEROES !== 'undefined' && HEROES[look.hero]) ? HEROES[look.hero].hair : '#5a3a20';
+  return sprite(frame ? 'hero2' : 'hero', { A: A[0], a: A[1], H: look.helm ? H[0] : hair, P: P[0], F: F[1], s: skins[look.skin || 0] }, k + ',' + (look.helm ? '' : hair));
 }
 // Item-Icon (Rüstung in Klassenfarbe, Schmuck/Zauber in Edelsteinfarbe)
 function itemIcon(it) {
@@ -359,11 +360,12 @@ function makeSpell(rarity, spell) {
   return { id: uid(), slot: 'spell', spell, rarity, up: 0, name: 'Zauberbuch: ' + SPELLS[spell].name, stats: {} };
 }
 // Zufälliges Ausrüstungsteil (ohne Zauber)
-function randomItem(rarity, ilvl = 1) {
+function randomItem(rarity, ilvl = 1, setChance = 0) {
+  if (rarity >= 1 && Math.random() < setChance) return addAffixes(randomSetItem(rarity, ilvl));
   const r = Math.random();
-  if (r < .4) return makeWeapon(pick(Object.keys(WEAPONS)), rarity, ilvl);
-  if (r < .85) return makeArmor(pick(Object.keys(ARMOR_SLOTS)), pick(Object.keys(ARMOR_CLASS)), rarity, ilvl);
-  return makeJewel(rarity, ilvl);
+  if (r < .4) return addAffixes(makeWeapon(pick(Object.keys(WEAPONS)), rarity, ilvl));
+  if (r < .85) return addAffixes(makeArmor(pick(Object.keys(ARMOR_SLOTS)), pick(Object.keys(ARMOR_CLASS)), rarity, ilvl));
+  return addAffixes(makeJewel(rarity, ilvl));
 }
 // Werte inkl. Schmied-Verbesserung (+10 % pro Stufe)
 function itemStats(it) {
@@ -372,6 +374,79 @@ function itemStats(it) {
 }
 const itemValue = it => Math.round((12 + (it.ilvl || 1) * 4) * RARITY[it.rarity].value * (1 + (it.up || 0) * .3) * (it.slot === 'spell' ? 4 : 1));
 const itemName = it => it.name + (it.up ? ' +' + it.up : '');
+
+
+/* ---------- Passive Boni (Affixe) – zusätzlich zu den Grundwerten ----------
+   p = Prozentwert (Zahl), f = Anteil (0.05 = 5 %) */
+const AFFIX = [
+  { k: 'dmgp', r: [4, 8], t: v => `+${v} % Schaden` },
+  { k: 'atkSpd', r: [4, 9], t: v => `+${v} % Angriffstempo` },
+  { k: 'crit', r: [.02, .05], f: true, t: v => `+${(v * 100).toFixed(1)} % Crit-Chance` },
+  { k: 'critDmg', r: [.1, .25], f: true, t: v => `+${Math.round(v * 100)} % Crit-Schaden` },
+  { k: 'hpp', r: [4, 9], t: v => `+${v} % Leben` },
+  { k: 'speed', r: [.03, .06], f: true, t: v => `+${Math.round(v * 100)} % Lauftempo` },
+  { k: 'lifesteal', r: [.01, .03], f: true, t: v => `${(v * 100).toFixed(1)} % Lebensraub` },
+  { k: 'manaRegen', r: [1, 3], t: v => `+${v} Mana pro Sekunde` },
+  { k: 'spellp', r: [6, 14], t: v => `+${v} % Zauberschaden` },
+  { k: 'cdr', r: [4, 8], t: v => `−${v} % Zauber-Abklingzeit` },
+  { k: 'thorns', r: [.08, .16], f: true, t: v => `${Math.round(v * 100)} % Dornenschaden` },
+  { k: 'goldp', r: [8, 18], t: v => `+${v} % Gold` },
+];
+const AFFIX_BY = Object.fromEntries(AFFIX.map(a => [a.k, a]));
+// Lesbarer Text für einen Bonus (Affixe, Set- und Heldenboni)
+function bonusText(k, v) {
+  if (AFFIX_BY[k]) return AFFIX_BY[k].t(v);
+  if (k === 'def') return `+${+v.toFixed ? +v.toFixed(1) : v} Verteidigung`;
+  if (k === 'pierce') return `Geschosse durchbohren +${v} Gegner`;
+  if (k === 'aoep') return `+${v} % Flächenschaden-Radius`;
+  return k + ' ' + v;
+}
+const bonusList = o => Object.entries(o).filter(([, v]) => v).map(([k, v]) => bonusText(k, typeof v === 'number' && !Number.isInteger(v) && v > 1 ? Math.round(v * 10) / 10 : v));
+function addAffixes(it) {
+  if (!it || it.slot === 'spell') return it;
+  const n = it.rarity, pool = AFFIX.slice(); it.affix = it.affix || [];
+  for (let i = 0; i < n && pool.length; i++) {
+    const a = pool.splice(rint(0, pool.length - 1), 1)[0], m = RARITY[it.rarity].mult * (1 + (it.ilvl || 1) * .03);
+    let v = rand(a.r[0], a.r[1]) * m; v = a.f ? Math.round(v * 1000) / 1000 : Math.max(1, Math.round(v));
+    it.affix.push({ k: a.k, v });
+  }
+  return it;
+}
+// Sets: 2 / 4 / 6 Teile desselben Sets geben zusätzliche Boni
+const SET_COLOR = '#4ade80';
+const SETS = {
+  orden: { name: 'Ritterorden', pre: 'Ordens', cls: 'chain', weapon: 'sword', gem: '#f4d03f', bonus: { 2: { def: 6 }, 4: { dmgp: 15 }, 6: { lifesteal: .03, hpp: 10 } } },
+  schatten: { name: 'Schattenklinge', pre: 'Schatten', cls: 'leather', weapon: 'dagger', gem: '#b45cff', bonus: { 2: { crit: .08 }, 4: { critDmg: .5 }, 6: { speed: .12, atkSpd: 15 } } },
+  wald: { name: 'Waldläufer', pre: 'Waldläufer', cls: 'leather', weapon: 'bow', gem: '#5fd068', bonus: { 2: { atkSpd: 15 }, 4: { pierce: 1 }, 6: { dmgp: 25 } } },
+  erzmagier: { name: 'Erzmagier', pre: 'Erzmagier', cls: 'cloth', weapon: 'staff', gem: '#6fd6ff', bonus: { 2: { manaRegen: 5 }, 4: { spellp: 25 }, 6: { cdr: 25, dmgp: 15 } } },
+  blutrausch: { name: 'Blutrausch', pre: 'Blutrausch', cls: 'plate', weapon: 'axe', gem: '#ff4a3a', bonus: { 2: { dmgp: 20 }, 4: { lifesteal: .05 }, 6: { atkSpd: 30 } } },
+  bergkoenig: { name: 'Bergkönig', pre: 'Bergkönigs', cls: 'plate', weapon: 'hammer', gem: '#c4ccd8', bonus: { 2: { hpp: 20 }, 4: { aoep: 30 }, 6: { thorns: .25, def: 10 } } },
+  gluecksritter: { name: 'Glücksritter', pre: 'Glücks', cls: 'leather', weapon: 'sword', gem: '#ffd25a', bonus: { 2: { goldp: 25 }, 4: { crit: .06, critDmg: .3 }, 6: { goldp: 40, speed: .08 } } },
+  frostwacht: { name: 'Frostwacht', pre: 'Frost', cls: 'chain', weapon: 'staff', gem: '#9ae8ff', bonus: { 2: { def: 5, manaRegen: 2 }, 4: { cdr: 20 }, 6: { spellp: 35, hpp: 10 } } },
+};
+const SET_NOUN = { weapon: { sword: 'klinge', dagger: 'dolch', bow: 'bogen', staff: 'stab', axe: 'axt', hammer: 'hammer' }, helm: 'helm', chest: { cloth: 'robe', leather: 'wams', chain: 'harnisch', plate: 'panzer' }, pants: 'beinschienen', boots: 'stiefel', jewel: 'siegel' };
+function makeSetItem(setId, slot, rarity, ilvl = 1) {
+  const S = SETS[setId]; rarity = Math.max(1, rarity); let it;
+  if (slot === 'weapon') it = makeWeapon(S.weapon, rarity, ilvl);
+  else if (slot === 'jewel') { it = makeJewel(rarity, ilvl); it.type = 'amulet'; it.gem = S.gem; }
+  else it = makeArmor(slot, S.cls, rarity, ilvl);
+  const noun = slot === 'weapon' ? SET_NOUN.weapon[S.weapon] : slot === 'chest' ? SET_NOUN.chest[S.cls] : SET_NOUN[slot];
+  it.name = S.pre + noun; it.set = setId;
+  for (const k of ['dmg', 'def', 'hp']) if (it.stats[k]) it.stats[k] = +(it.stats[k] * 1.1).toFixed(1);
+  return it;
+}
+const randomSetItem = (rarity, ilvl) => makeSetItem(pick(Object.keys(SETS)), pick(['weapon', 'helm', 'chest', 'pants', 'boots', 'jewel']), rarity, ilvl);
+// Helden: Ritter von Anfang an, weitere ab Konto-Level. Jeder Held levelt einzeln (max. 20).
+const HERO_MAX = 20;
+const HEROES = {
+  ritter: { name: 'Ritter', icon: '🛡', unlock: 1, weapons: 'all', hair: '#5a3a20', desc: 'Allrounder: kleiner Bonus mit jeder Waffe.', bonus: l => ({ dmgp: 6 + l, def: Math.round((1 + l * .5) * 10) / 10 }) },
+  bogen: { name: 'Bogenschütze', icon: '🏹', unlock: 4, weapons: ['bow'], hair: '#2f7a2a', desc: 'Großer Schadensbonus – aber nur mit Bögen.', bonus: l => ({ dmgp: 30 + l * 3, atkSpd: 8 + l, pierce: l >= 10 ? 1 : 0 }) },
+  assassine: { name: 'Assassine', icon: '🗡', unlock: 7, weapons: ['dagger'], hair: '#2a1a3a', desc: 'Tödliche kritische Treffer mit Dolchen.', bonus: l => ({ crit: +(.1 + l * .006).toFixed(3), critDmg: +(.4 + l * .03).toFixed(2), speed: .06 }) },
+  magier: { name: 'Magier', icon: '🔮', unlock: 10, weapons: ['staff'], hair: '#2a4aa8', desc: 'Stärkere Geschosse und Zauber mit Stäben.', bonus: l => ({ dmgp: 20 + l * 2, spellp: 30 + l * 3, manaRegen: 3, cdr: 10 }) },
+  berserker: { name: 'Berserker', icon: '🪓', unlock: 13, weapons: ['axe', 'hammer'], hair: '#b8401a', desc: 'Wucht und Lebensraub mit Äxten und Hämmern.', bonus: l => ({ dmgp: 25 + Math.round(l * 2.5), hpp: 10, lifesteal: +(.02 + l * .001).toFixed(3) }) },
+};
+const heroXpNeed = l => Math.round(30 * Math.pow(l, 1.4));
+const heroFits = (hid, wtype) => { const H = HEROES[hid]; return H.weapons === 'all' || H.weapons.includes(wtype); };
 
 /* =====================================================================
    MODUL 6: SPIELERPROFIL & SPEICHERN (localStorage)
@@ -385,7 +460,7 @@ const Profile = {
     const bw = makeWeapon('bow', 0, 1); bw.name = 'Alter Kurzbogen';
     const dg = makeWeapon('dagger', 0, 1); dg.name = 'Stumpfer Dolch';
     const sp = makeSpell(0, 'fireball'); sp.name = 'Anfänger-Zauberbuch: Feuerball';
-    return { name: 'Abenteurer', level: 1, xp: 0, gold: 150, skin: 0,
+    return { name: 'Abenteurer', level: 1, xp: 0, gold: 150, skin: 0, hero: 'ritter', heroes: {},
       equip: { weapon: sw, helm: null, chest: ch, pants: null, boots: null, jewel: null },
       hotbar: [sp, null, null, null], inv: [bw, dg, null, null], runs: 0, wins: 0,
       settings: { vol: .5, shake: true, touch: 'auto' }, shop: null };
@@ -395,10 +470,15 @@ const Profile = {
     if (!this.data || !this.data.equip) this.data = this.fresh();
     const d = this.data; d.inv = d.inv || []; while (d.inv.length < INV_SIZE) d.inv.push(null); d.inv.length = INV_SIZE;
     d.hotbar = d.hotbar || [null, null, null, null];
+    d.heroes = d.heroes || {}; for (const k of Object.keys(HEROES)) d.heroes[k] = d.heroes[k] || { lvl: 1, xp: 0 }; if (!HEROES[d.hero]) d.hero = 'ritter';
     Sound.setVol(d.settings.vol);
   },
   save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); } catch (e) {} },
   xpNeed(l) { return Math.round(40 * Math.pow(l, 1.45)); },
+  heroUnlocked(k) { return this.data.level >= HEROES[k].unlock; },
+  hero() { return this.data.heroes[this.data.hero]; },
+  addHeroXp(n) { const h = this.hero(); let ups = 0; if (h.lvl >= HERO_MAX) return 0; h.xp += n; while (h.lvl < HERO_MAX && h.xp >= heroXpNeed(h.lvl)) { h.xp -= heroXpNeed(h.lvl); h.lvl++; ups++; } if (h.lvl >= HERO_MAX) h.xp = 0; return ups; },
+  stats() { const d = this.data; return heroStats(d.equip, d.level, d.hero, this.hero().lvl); },
   addXp(n) {
     const d = this.data; let ups = 0; d.xp += n;
     while (d.xp >= this.xpNeed(d.level)) { d.xp -= this.xpNeed(d.level); d.level++; ups++; }
@@ -406,19 +486,26 @@ const Profile = {
   },
   // Gegenstand ins Inventar (bei vollem Inventar wird er zu Gold)
   give(it) { const d = this.data, i = d.inv.indexOf(null); if (i < 0) { d.gold += Math.round(itemValue(it) * .4); return false; } d.inv[i] = it; return true; },
-  look() { const e = this.data.equip; return { helm: e.helm && e.helm.cls, chest: e.chest && e.chest.cls, pants: e.pants && e.pants.cls, boots: e.boots && e.boots.cls, skin: this.data.skin }; },
+  look() { const e = this.data.equip; return { hero: this.data.hero, helm: e.helm && e.helm.cls, chest: e.chest && e.chest.cls, pants: e.pants && e.pants.cls, boots: e.boots && e.boots.cls, skin: this.data.skin }; },
 };
 const INV_SIZE = 30;
 // Kampfwerte aus Level + Ausrüstung
-function heroStats(equip, level) {
-  const st = { maxHp: 70 + level * 9, def: 0, dmgp: 0, crit: 0, speed: 0, mana: 50, manaRegen: 4 };
+function heroStats(equip, level, heroId = 'ritter', heroLvl = 1) {
+  const st = { maxHp: 70 + level * 9 + heroLvl * 3, def: 0, dmgp: 0, crit: 0, critDmg: 0, atkSpd: 0, speed: 0, mana: 50, manaRegen: 4, hpp: 0, lifesteal: 0, spellp: 0, cdr: 0, thorns: 0, goldp: 0, pierce: 0, aoep: 0, sets: {} };
+  const add = o => { for (const [k, v] of Object.entries(o)) if (v) st[k] = (st[k] || 0) + v; };
   for (const k of ['weapon', 'helm', 'chest', 'pants', 'boots', 'jewel']) {
     const it = equip[k]; if (!it) continue; const s = itemStats(it);
     st.maxHp += s.hp; st.def += s.def; st.crit += s.crit; st.speed += s.speed; st.dmgp += s.dmgp || 0; st.manaRegen += (s.mana || 0) * .5;
+    for (const a of it.affix || []) add({ [a.k]: a.v });
+    if (it.set) st.sets[it.set] = (st.sets[it.set] || 0) + 1;
   }
+  for (const [id, n] of Object.entries(st.sets)) for (const th of [2, 4, 6]) if (n >= th) add(SETS[id].bonus[th]);
   const w = equip.weapon || makeWeapon('sword', 0); const W = WEAPONS[w.type];
+  // Heldenbonus nur mit passender Waffe
+  st.hero = heroId; st.heroLvl = heroLvl; st.heroActive = heroFits(heroId, w.type); if (st.heroActive) add(HEROES[heroId].bonus(heroLvl));
+  st.maxHp *= 1 + st.hpp / 100;
   st.weapon = w; st.W = W; st.dmg = itemStats(w).dmg * (1 + level * .04) * (1 + st.dmgp / 100);
-  st.moveSpeed = 72 * (1 + st.speed);
+  st.moveSpeed = 72 * (1 + st.speed); st.cd = W.cd / (1 + st.atkSpd / 100);
   return st;
 }
 
@@ -742,7 +829,7 @@ function jetPhase(o) { const p = o.t % 3.2; return p < 1.6 ? 0 : p < 2.2 ? 1 : 2
 /* =====================================================================
    MODUL 9: DUNGEON-RUN – Zustand, Bewegung, Kampf, KI, Rätsel, Fallen, Loot
    ===================================================================== */
-const Input = { move: { x: 0, y: 0 }, aimX: VW / 2, aimY: VH / 2, attack: false, interact: false, interactPressed: false, dodge: false, spells: [false, false, false, false], touch: false, keys: new Set() };
+const Input = { stick: { on: false, dx: 0, dy: 0, t: 0 }, release: null, queued: 0, move: { x: 0, y: 0 }, aimX: VW / 2, aimY: VH / 2, attack: false, interact: false, interactPressed: false, dodge: false, spells: [false, false, false, false], touch: false, keys: new Set() };
 
 const Run = {
   active: false, paused: false, time: 0, room: null, dungeon: null, heroes: [], enemies: [], projs: [], parts: [], nums: [], fx: [], coins: [],
@@ -798,7 +885,10 @@ function makeHero(m, isPlayer) {
     const rr = () => clamp(Math.floor(level / 5) + (Math.random() < .3 ? 1 : 0), 0, 3);
     equip = { weapon: makeWeapon(m.weapon, rr(), level), helm: m.look.helm ? makeArmor('helm', m.look.helm, rr(), level) : null, chest: makeArmor('chest', m.look.chest, rr(), level), pants: makeArmor('pants', m.look.pants, rr(), level), boots: makeArmor('boots', m.look.boots, rr(), level), jewel: null };
   }
-  const st = heroStats(equip, level);
+  let heroId, heroLvl;
+  if (isPlayer) { heroId = Profile.data.hero; heroLvl = Profile.hero().lvl; }
+  else { const wt = equip.weapon.type; heroId = Object.keys(HEROES).filter(k => HEROES[k].unlock <= level && heroFits(k, wt)).pop() || 'ritter'; heroLvl = clamp(Math.ceil(level / 2), 1, HERO_MAX); }
+  const st = heroStats(equip, level, heroId, heroLvl);
   return { kind: 'hero', id: m.id, name: m.name, isPlayer, level, look: m.look, equip, st, x: VW / 2, y: VH / 2, r: 5, hp: st.maxHp, mana: st.mana, aim: 0, face: 1, atkCd: 0,
     swing: null, inv: 0, dodgeT: 0, dodgeCd: 0, dvx: 0, dvy: 0, downed: false, bleed: 0, revive: 0, out: false, spellCd: [0, 0, 0, 0], hotbar: isPlayer ? Profile.data.hotbar : [], anim: 0, moving: false,
     regen: 0, pushT: 0, ai: { t: 0, ox: rand(-14, 14), oy: rand(-10, 10) }, kb: { x: 0, y: 0 }, hurtFlash: 0 };
@@ -824,10 +914,11 @@ function startWave() {
 }
 
 /* ---------- Schaden ---------- */
-function rollHit(h, mult = 1) { const crit = Math.random() < h.st.crit; return { dmg: h.st.dmg * mult * rand(.9, 1.1) * (crit ? 2 : 1), crit }; }
-function hurtEnemy(e, dmg, crit, srcX, srcY, knock = 60) {
+function rollHit(h, mult = 1) { const crit = Math.random() < h.st.crit; return { dmg: h.st.dmg * mult * rand(.9, 1.1) * (crit ? 2 + (h.st.critDmg || 0) : 1), crit }; }
+function hurtEnemy(e, dmg, crit, srcX, srcY, knock = 60, by = null) {
   if (e.dead || e.inv > 0) return;
-  e.hp -= dmg; e.flash = .12; Run.hitstop = Math.max(Run.hitstop, crit ? .06 : .025);
+  e.hp -= dmg;
+  if (by && by.st.lifesteal && !by.downed) by.hp = Math.min(by.st.maxHp, by.hp + dmg * by.st.lifesteal); // Lebensraub e.flash = .12; Run.hitstop = Math.max(Run.hitstop, crit ? .06 : .025);
   const a = Math.atan2(e.y - srcY, e.x - srcX), res = e.boss ? .15 : 1; e.kb.x += Math.cos(a) * knock * res; e.kb.y += Math.sin(a) * knock * res;
   num(e.x + rand(-3, 3), e.y - 10, Math.round(dmg), crit ? '#ffd25a' : '#ffffff', crit);
   burst(e.x, e.y, e.type === 'slime' || e.type === 'minislime' ? ['#3c9a46', '#8fe05a'] : e.type === 'bat' ? ['#6a3a8e', '#3a2448'] : ['#e8e2d0', '#9a94a8'], crit ? 10 : 5, crit ? 90 : 60, .4);
@@ -847,9 +938,10 @@ function dropGold(x, y, amount) {
   if (amount <= 0) return; const parts = Math.min(6, Math.max(1, Math.ceil(amount / 4)));
   for (let i = 0; i < parts; i++) { const a = rand(Math.PI * 2), s = rand(30, 80); Run.coins.push({ x, y, r: 1, vx: Math.cos(a) * s, vy: Math.sin(a) * s, z: 0, vz: rand(40, 80), amount: Math.round(amount / parts) || 1, t: 0 }); }
 }
-function hurtHero(h, dmg, srcX, srcY) {
+function hurtHero(h, dmg, srcX, srcY, from = null) {
   if (h.inv > 0 || h.downed || h.out || h.dodgeT > 0 || Run.ended) return;
-  const red = dmg * 100 / (100 + h.st.def * 7); h.hp -= red; h.inv = h.isPlayer ? .6 : .45; h.hurtFlash = .2;
+  const red = dmg * 100 / (100 + h.st.def * 7); h.hp -= red;
+  if (from && h.st.thorns && !from.dead) hurtEnemy(from, dmg * h.st.thorns, false, h.x, h.y, 20); // Dornen h.inv = h.isPlayer ? .6 : .45; h.hurtFlash = .2;
   const a = Math.atan2(h.y - srcY, h.x - srcX); h.kb.x += Math.cos(a) * 90; h.kb.y += Math.sin(a) * 90;
   num(h.x, h.y - 12, Math.round(red), '#ff5a4a'); burst(h.x, h.y, ['#9e2a22', '#ff4a3a'], 6, 50, .4);
   if (h.isPlayer) { sfx('hurt'); shake(5); }
@@ -865,25 +957,25 @@ function downHero(h) {
 /* ---------- Angriffe der Helden ---------- */
 function heroAttack(h, aim) {
   if (h.atkCd > 0 || h.downed || h.out) return;
-  const W = h.st.W; h.atkCd = W.cd; h.aim = aim; h.face = Math.cos(aim) >= 0 ? 1 : -1; h.swing = { t: 0, dur: Math.max(.12, Math.min(.3, W.cd * .7)) };
+  const W = h.st.W, aoeM = 1 + (h.st.aoep || 0) / 100; h.atkCd = h.st.cd; h.aim = aim; h.face = Math.cos(aim) >= 0 ? 1 : -1; h.swing = { t: 0, dur: Math.max(.12, Math.min(.3, W.cd * .7)) };
   if (W.kind === 'melee') {
     sfx(W.aoe ? 'heavy' : 'swing');
-    Run.fx.push({ type: 'slash', x: h.x, y: h.y - 2, a: aim, arc: W.arc, range: W.range + 4, t: 0, dur: .14, col: W.aoe ? '#ffd2a0' : '#ffffff', heavy: !!W.aoe });
+    Run.fx.push({ type: 'slash', x: h.x, y: h.y - 2, a: aim, arc: W.arc * (W.aoe ? aoeM : 1), range: W.range + 4, t: 0, dur: .14, col: W.aoe ? '#ffd2a0' : '#ffffff', heavy: !!W.aoe });
     let hits = 0;
     for (const e of Run.enemies) {
       if (e.dead) continue; const d = Math.hypot(e.x - h.x, e.y - h.y);
-      if (d <= W.range + e.r && angDiff(aim, Math.atan2(e.y - h.y, e.x - h.x)) <= W.arc / 2) { const r = rollHit(h); hurtEnemy(e, r.dmg, r.crit, h.x, h.y, W.knock); hits++; }
+      if (d <= W.range + e.r && angDiff(aim, Math.atan2(e.y - h.y, e.x - h.x)) <= W.arc * (W.aoe ? aoeM : 1) / 2) { const r = rollHit(h); hurtEnemy(e, r.dmg, r.crit, h.x, h.y, W.knock, h); hits++; }
     }
     if (h.st.weapon.type === 'hammer') { // Schockwelle am Aufschlagpunkt
       const ix = h.x + Math.cos(aim) * W.range * .8, iy = h.y + Math.sin(aim) * W.range * .8;
-      Run.fx.push({ type: 'ring', x: ix, y: iy, r: 2, max: W.aoe, speed: 160, dmg: 0, team: 'none', col: '#ffd2a0', hit: new Set() });
-      for (const e of Run.enemies) if (!e.dead && Math.hypot(e.x - ix, e.y - iy) < W.aoe + e.r && angDiff(aim, Math.atan2(e.y - h.y, e.x - h.x)) > W.arc / 2) { const r = rollHit(h, .6); hurtEnemy(e, r.dmg, r.crit, ix, iy, W.knock); }
+      Run.fx.push({ type: 'ring', x: ix, y: iy, r: 2, max: W.aoe * aoeM, speed: 160, dmg: 0, team: 'none', col: '#ffd2a0', hit: new Set() });
+      for (const e of Run.enemies) if (!e.dead && Math.hypot(e.x - ix, e.y - iy) < W.aoe * aoeM + e.r && angDiff(aim, Math.atan2(e.y - h.y, e.x - h.x)) > W.arc / 2) { const r = rollHit(h, .6); hurtEnemy(e, r.dmg, r.crit, ix, iy, W.knock, h); }
       burst(ix, iy, ['#9a94a8', '#5a5468'], 10, 70, .4); if (h.isPlayer) shake(3);
     }
     // Rätsel-Feuerschalen kann man nicht schlagen; Fackeln nur mit Feuer
   } else {
     const sp = W.proj, magic = W.kind === 'magic', r = rollHit(h);
-    Run.projs.push({ x: h.x + Math.cos(aim) * 6, y: h.y - 2 + Math.sin(aim) * 6, vx: Math.cos(aim) * sp, vy: Math.sin(aim) * sp, r: magic ? 3 : 2, dmg: r.dmg, crit: r.crit, team: 'hero', kind: magic ? 'orb' : 'arrow', life: 1.4, knock: W.knock, col: magic ? '#6fd6ff' : '#e8e2d0', pierce: magic ? 1 : 0, hit: new Set() });
+    Run.projs.push({ x: h.x + Math.cos(aim) * 6, y: h.y - 2 + Math.sin(aim) * 6, vx: Math.cos(aim) * sp, vy: Math.sin(aim) * sp, r: magic ? 3 : 2, dmg: r.dmg, crit: r.crit, team: 'hero', kind: magic ? 'orb' : 'arrow', life: 1.4, knock: W.knock, col: magic ? '#6fd6ff' : '#e8e2d0', pierce: (magic ? 1 : 0) + (h.st.pierce || 0), hit: new Set(), by: h });
     sfx(magic ? 'magic' : 'shoot');
   }
 }
@@ -894,11 +986,11 @@ function castSpell(h, idx) {
   if (h.spellCd[idx] > 0) { if (h.isPlayer) sfx('wrong'); return; }
   const S = SPELLS[it.spell], st = spellStats(it);
   if (h.mana < st.mana) { if (h.isPlayer) { num(h.x, h.y - 16, 'Kein Mana', '#6fa8ff'); sfx('wrong'); } return; }
-  h.mana -= st.mana; h.spellCd[idx] = st.cd;
-  const pw = (1 + h.level * .05) * (1 + (h.st.W.spell || 0)), dmg = st.dmg * pw, aim = h.aim;
+  h.mana -= st.mana; h.spellCd[idx] = st.cd * (1 - Math.min(60, h.st.cdr || 0) / 100);
+  const pw = (1 + h.level * .05) * (1 + (h.st.W.spell || 0)) * (1 + (h.st.spellp || 0) / 100), dmg = st.dmg * pw, aim = h.aim;
   switch (it.spell) {
     case 'fireball':
-      Run.projs.push({ x: h.x, y: h.y - 2, vx: Math.cos(aim) * 170, vy: Math.sin(aim) * 170, r: 4, dmg, crit: false, team: 'hero', kind: 'fireball', life: 1.6, knock: 120, col: '#ff7a2a', aoe: 28, burn: st.extra, hit: new Set() });
+      Run.projs.push({ x: h.x, y: h.y - 2, vx: Math.cos(aim) * 170, vy: Math.sin(aim) * 170, r: 4, dmg, crit: false, team: 'hero', kind: 'fireball', life: 1.6, knock: 120, col: '#ff7a2a', aoe: 28 * (1 + (h.st.aoep || 0) / 100), by: h, burn: st.extra, hit: new Set() });
       sfx('fire'); break;
     case 'heal':
       for (const o of Run.heroes) if (!o.downed && !o.out && Math.hypot(o.x - h.x, o.y - h.y) < 70) { healHero(o, o.st.maxHp * S.heal * (1 + .2 * it.rarity)); if (st.extra) o.regen = 5; burst(o.x, o.y, ['#5fd068', '#b8ffbe'], 14, 40, .8, 1, -30); }
@@ -911,7 +1003,7 @@ function castSpell(h, idx) {
       for (let j = 0; j < jumps; j++) {
         let best = null, bd = j === 0 ? 130 : 80;
         for (const e of Run.enemies) { if (e.dead || hit.has(e)) continue; const d = Math.hypot(e.x - from.x, e.y - from.y); const ok = j > 0 || angDiff(aim, Math.atan2(e.y - h.y, e.x - h.x)) < 1.2 || d < 40; if (ok && d < bd) { bd = d; best = e; } }
-        if (!best) break; hit.add(best); pts.push({ x: best.x, y: best.y }); hurtEnemy(best, dmg * (1 - j * .1), false, from.x, from.y, 30); from = best;
+        if (!best) break; hit.add(best); pts.push({ x: best.x, y: best.y }); hurtEnemy(best, dmg * (1 - j * .1), false, from.x, from.y, 30, h); from = best;
       }
       if (pts.length === 1) pts.push({ x: h.x + Math.cos(aim) * 60, y: h.y + Math.sin(aim) * 60 });
       Run.fx.push({ type: 'bolt', pts, t: 0, dur: .3 }); sfx('zap'); break;
@@ -921,7 +1013,7 @@ function castSpell(h, idx) {
       for (let s = 4; s <= 70; s += 3) { const nx = h.x + Math.cos(aim) * s, ny = h.y + Math.sin(aim) * s; if (hitsWall(nx, ny, h.r)) break; tx = nx; ty = ny; }
       burst(ox, oy, ['#b45cff', '#3a2448', '#000'], 16, 60, .5); h.x = tx; h.y = ty; h.inv = Math.max(h.inv, .5); burst(tx, ty, ['#b45cff', '#d07ad6'], 16, 60, .5);
       if (st.extra) { Run.fx.push({ type: 'ring', x: ox, y: oy, r: 2, max: 36, speed: 150, dmg, team: 'hero', col: '#b45cff', hit: new Set() }); }
-      else for (const e of Run.enemies) if (!e.dead && Math.hypot(e.x - tx, e.y - ty) < 22) hurtEnemy(e, dmg, false, tx, ty, 60);
+      else for (const e of Run.enemies) if (!e.dead && Math.hypot(e.x - tx, e.y - ty) < 22) hurtEnemy(e, dmg, false, tx, ty, 60, h);
       sfx('blink'); break;
     }
   }
@@ -932,7 +1024,8 @@ function updatePlayer(h, dt) {
   if (h.downed || h.out) return;
   let mx = Input.move.x, my = Input.move.y; const ml = Math.hypot(mx, my); if (ml > 1) { mx /= ml; my /= ml; }
   // Zielen: Maus bzw. bei Touch automatisch auf den nächsten Gegner
-  if (Input.touch) {
+  if (Input.touch && Input.stick.on && Math.hypot(Input.stick.dx, Input.stick.dy) > .3) { /* Zielrichtung kommt vom Angriffs-Joystick */ }
+  else if (Input.touch) {
     let best = null, bd = 150; for (const e of Run.enemies) { if (e.dead) continue; const d = Math.hypot(e.x - h.x, e.y - h.y); if (d < bd) { bd = d; best = e; } }
     if (best) h.aim = Math.atan2(best.y - h.y, best.x - h.x); else if (ml > .2) h.aim = Math.atan2(my, mx);
   } else h.aim = Math.atan2(Input.aimY - h.y, Input.aimX - h.x);
@@ -948,6 +1041,10 @@ function updatePlayer(h, dt) {
     const blocked = moveEnt(h, mx * sp * dt, my * sp * dt);
     tryPushBlock(h, mx, my, blocked, dt);
   }
+  // Zielen wie bei Brawl Stars: Angriffsknopf ziehen = zielen, loslassen = Angriff, antippen = automatisch zielen
+  const S = Input.stick; if (S.on) { S.t += dt; if (Math.hypot(S.dx, S.dy) > .3) h.aim = Math.atan2(S.dy, S.dx); else if (S.t > .35) heroAttack(h, h.aim); }
+  if (Input.release) { if (Input.release.dir !== null) h.aim = Input.release.dir; Input.queued = .35; Input.release = null; }
+  if (Input.queued > 0) { Input.queued -= dt; if (h.atkCd <= 0) { heroAttack(h, h.aim); Input.queued = 0; } }
   if (Input.attack) heroAttack(h, h.aim);
   for (let i = 0; i < 4; i++) if (Input.spells[i]) { castSpell(h, i); Input.spells[i] = false; }
 }
@@ -1003,7 +1100,7 @@ function updateEnemy(e, dt) {
   if (AI === 'melee') {
     if (e.state === 'move') { moveEnt(e, Math.cos(a) * e.speed * dt, Math.sin(a) * e.speed * dt); if (d < e.r + h.r + 11) { e.state = 'wind'; e.t = .45; e.atkA = a; } }
     else if (e.state === 'wind') { e.t -= dt; if (e.t <= 0) { e.state = 'rest'; e.t = .55; Run.fx.push({ type: 'slash', x: e.x, y: e.y, a: e.atkA, arc: 1.6, range: 18, t: 0, dur: .12, col: '#ff8a7a' });
-      for (const o of aliveHeroes()) if (Math.hypot(o.x - e.x, o.y - e.y) < 20 + o.r && angDiff(e.atkA, Math.atan2(o.y - e.y, o.x - e.x)) < 1) hurtHero(o, e.dmg, e.x, e.y); } }
+      for (const o of aliveHeroes()) if (Math.hypot(o.x - e.x, o.y - e.y) < 20 + o.r && angDiff(e.atkA, Math.atan2(o.y - e.y, o.x - e.x)) < 1) hurtHero(o, e.dmg, e.x, e.y, e); } }
     else { e.t -= dt; if (e.t <= 0) e.state = 'move'; }
   }
   if (AI === 'hop') {
@@ -1032,7 +1129,7 @@ function updateEnemy(e, dt) {
 }
 function contact(e) {
   if (e.touchCd > 0) return;
-  for (const h of aliveHeroes()) if (Math.hypot(h.x - e.x, h.y - e.y) < e.r + h.r + 1) { hurtHero(h, e.dmg, e.x, e.y); e.touchCd = .8; break; }
+  for (const h of aliveHeroes()) if (Math.hypot(h.x - e.x, h.y - e.y) < e.r + h.r + 1) { hurtHero(h, e.dmg, e.x, e.y, e); e.touchCd = .8; break; }
 }
 function separate() {
   const es = Run.enemies;
@@ -1082,7 +1179,7 @@ function updateBoss(b, dt) {
   if (b.state === 'charging') {
     const sp = 240 * enr, hit = moveEnt(b, Math.cos(b.chA) * sp * dt, Math.sin(b.chA) * sp * dt);
     if (Math.random() < .5) burst(b.x, b.y + 8, ['#5a5468', '#9a94a8'], 2, 30, .3);
-    for (const o of aliveHeroes()) if (!b.hitSet.has(o) && Math.hypot(o.x - b.x, o.y - b.y) < b.r + o.r + 2) { b.hitSet.add(o); hurtHero(o, b.dmg * 1.3, b.x, b.y); }
+    for (const o of aliveHeroes()) if (!b.hitSet.has(o) && Math.hypot(o.x - b.x, o.y - b.y) < b.r + o.r + 2) { b.hitSet.add(o); hurtHero(o, b.dmg * 1.3, b.x, b.y, b); }
     if (hit || b.t <= 0) { b.state = 'stun'; b.t = hit ? .9 : .4; if (hit) { shake(7); sfx('heavy'); burst(b.x, b.y, ['#9a94a8', '#e8e2d0'], 16, 90); } }
     return;
   }
@@ -1112,7 +1209,7 @@ function bossDefeated(b) {
 function explode(p) {
   Run.fx.push({ type: 'boom', x: p.x, y: p.y, r: p.aoe, t: 0, dur: .3, col: p.col });
   burst(p.x, p.y, ['#ff7a2a', '#f4d03f', '#9e2a22', '#fff2a0'], 26, 110, .6); sfx('fire'); shake(5);
-  for (const e of Run.enemies) if (!e.dead && Math.hypot(e.x - p.x, e.y - p.y) < p.aoe + e.r) { hurtEnemy(e, p.dmg, false, p.x, p.y, 120); if (p.burn) e.burn = 3; }
+  for (const e of Run.enemies) if (!e.dead && Math.hypot(e.x - p.x, e.y - p.y) < p.aoe + e.r) { hurtEnemy(e, p.dmg, false, p.x, p.y, 120, p.by); if (p.burn) e.burn = 3; }
   for (const o of Run.room.objs) if (o.type === 'brazier' && Math.hypot(o.tx * T + 8 - p.x, o.ty * T + 8 - p.y) < p.aoe + 10) lightBrazier(o);
 }
 function updateProjs(dt) {
@@ -1125,7 +1222,7 @@ function updateProjs(dt) {
       if (p.aoe) explode(p); else burst(p.x, p.y, p.col, 4, 40, .3); p.life = 0; continue;
     }
     if (p.team === 'hero') {
-      for (const e of Run.enemies) { if (e.dead || p.hit.has(e)) continue; if (Math.hypot(e.x - p.x, e.y - p.y) < e.r + p.r) { if (p.aoe) { explode(p); p.life = 0; break; } p.hit.add(e); hurtEnemy(e, p.dmg, p.crit, p.x - p.vx * .05, p.y - p.vy * .05, p.knock); if (p.pierce-- <= 0) { p.life = 0; break; } } }
+      for (const e of Run.enemies) { if (e.dead || p.hit.has(e)) continue; if (Math.hypot(e.x - p.x, e.y - p.y) < e.r + p.r) { if (p.aoe) { explode(p); p.life = 0; break; } p.hit.add(e); hurtEnemy(e, p.dmg, p.crit, p.x - p.vx * .05, p.y - p.vy * .05, p.knock, p.by); if (p.pierce-- <= 0) { p.life = 0; break; } } }
     } else {
       for (const h of aliveHeroes()) if (Math.hypot(h.x - p.x, h.y - p.y) < h.r + p.r) { hurtHero(h, p.dmg, p.x, p.y); p.life = 0; burst(p.x, p.y, p.col, 5, 40); break; }
     }
@@ -1153,7 +1250,7 @@ function updateFx(dt) {
     c.t += dt; c.vz -= 260 * dt; c.z = Math.max(0, c.z + c.vz * dt); if (c.z === 0) { c.vx *= .85; c.vy *= .85; }
     moveEnt(c, c.vx * dt, c.vy * dt);
     if (c.t > .4) { const p = aliveHeroes().reduce((b, h) => !b || Math.hypot(h.x - c.x, h.y - c.y) < Math.hypot(b.x - c.x, b.y - c.y) ? h : b, null);
-      if (p) { const d = Math.hypot(p.x - c.x, p.y - c.y); if (d < 46) { c.x += (p.x - c.x) / d * 140 * dt; c.y += (p.y - c.y) / d * 140 * dt; } if (d < 7) { c.taken = true; Run.gold += c.amount; sfx('coin'); num(c.x, c.y - 6, '+' + c.amount, '#ffd25a'); } } }
+      if (p) { const d = Math.hypot(p.x - c.x, p.y - c.y); if (d < 46) { c.x += (p.x - c.x) / d * 140 * dt; c.y += (p.y - c.y) / d * 140 * dt; } if (d < 7) { c.taken = true; c.amount = Math.round(c.amount * (1 + (player().st.goldp || 0) / 100)); Run.gold += c.amount; sfx('coin'); num(c.x, c.y - 6, '+' + c.amount, '#ffd25a'); } } }
   }
   Run.coins = Run.coins.filter(c => !c.taken);
 }
@@ -1210,7 +1307,7 @@ function openChest(o) {
   burst(x, y, [RARITY[rar].color, '#ffffff', '#ffd25a'], 14 + rar * 10, 60 + rar * 25, .9, 1, -30);
   dropGold(x, y + 6, Math.round(rint(6, 14) * (1 + rar) * (1 + (Run.level - 1) * .1)));
   // Zauberbücher sind sehr selten (ca. 3 %), Boss-Truhe: 25 %
-  const it = Math.random() < (o.boss ? .25 : .03) ? makeSpell(rar) : randomItem(rar, Run.level);
+  const it = Math.random() < (o.boss ? .25 : .03) ? makeSpell(rar) : randomItem(rar, Run.level, o.boss ? .5 : .22);
   Run.found.push(it);
   setTimeout(() => { if (!Run.active) return; Run.fx.push({ type: 'itempop', x, y, t: 0, dur: 2.2, it }); banner(RARITY[rar].name + '!', itemName(it), 2.4, RARITY[rar].color); }, 450);
 }
@@ -1255,7 +1352,8 @@ function enterRoom(room, fromDir) {
 }
 function checkDoors() {
   const p = player(); if (p.downed || Run.fade > 0) return;
-  let dir = null; if (p.y < 6) dir = 'n'; else if (p.y > VH - 4) dir = 's'; else if (p.x < 4) dir = 'w'; else if (p.x > VW - 4) dir = 'e';
+  // Schwellen liegen innerhalb der Türöffnung (die Wand daneben lässt einen gar nicht so weit)
+  let dir = null; if (p.y < 8) dir = 'n'; else if (p.y > VH - 10) dir = 's'; else if (p.x < 9) dir = 'w'; else if (p.x > VW - 9) dir = 'e';
   if (!dir || !Run.room.doors[dir] || doorLocked(dir)) return;
   const next = Run.room.doors[dir]; Run.fade = .35; sfx('door');
   setTimeout(() => { if (Run.active) enterRoom(next, OPP[dir]); }, 160);
@@ -1278,10 +1376,10 @@ function endRun(kind) {
   if (Run.ended) return; Run.ended = true;
   const d = Profile.data, lost = kind === 'victory' ? 0 : Math.floor(Run.gold * .5), gold = Run.gold - lost;
   d.gold += gold; d.runs++; if (kind === 'victory') { d.wins++; Run.xp += 40; }
-  const lvlBefore = d.level, ups = Profile.addXp(Run.xp);
+  const lvlBefore = d.level, ups = Profile.addXp(Run.xp), heroUps = Profile.addHeroXp(Run.xp);
   const kept = Run.found.map(it => ({ it, ok: Profile.give(it) }));
   Profile.save(); Social.updateMe(meInfo());
-  const res = { kind, gold, lost, xp: Run.xp, level: d.level, ups, items: kept, kills: Run.kills, rooms: Run.roomsSeen, total: Run.dungeon.list.length, time: (performance.now() - Run.startTime) / 1000 };
+  const res = { kind, gold, lost, xp: Run.xp, level: d.level, ups, heroUps, hero: d.hero, heroLvl: Profile.hero().lvl, items: kept, kills: Run.kills, rooms: Run.roomsSeen, total: Run.dungeon.list.length, time: (performance.now() - Run.startTime) / 1000 };
   setTimeout(() => { Run.active = false; Touch.update(); if (ups) sfx('levelup'); UI.results(res); }, kind === 'victory' ? 900 : 1600);
   if (kind === 'death') { sfx('down'); banner('Gefallen…', 'Die Hälfte des Golds aus diesem Run ist verloren', 3, '#ff5a4a'); }
 }
@@ -1450,6 +1548,11 @@ function renderRun() {
   for (const p of Run.projs) drawProj(ctx, p);
   for (const f of Run.fx) if (f.type !== 'warn' && f.type !== 'spawn' && f.type !== 'itempop' && f.type !== 'chestlight') drawFx(ctx, f);
   for (const p of Run.parts) { ctx.globalAlpha = Math.min(1, p.life / p.max * 1.5); ctx.fillStyle = p.col; ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size || 1, p.size || 1); } ctx.globalAlpha = 1;
+  // Zielanzeige beim Ziehen des Angriffsknopfs
+  { const S = Input.stick, h = player(); if (S.on && Math.hypot(S.dx, S.dy) > .3 && h && !h.downed) { const W = h.st.W, a = Math.atan2(S.dy, S.dx);
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 1;
+    if (W.kind === 'melee') { const rr = W.range + 4, arc = W.arc * (1 + (h.st.aoep || 0) / 200); ctx.beginPath(); ctx.moveTo(h.x, h.y - 2); ctx.arc(h.x, h.y - 2, rr, a - arc / 2, a + arc / 2); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+    else { const len = 150; ctx.save(); ctx.translate(h.x, h.y - 2); ctx.rotate(a); ctx.fillRect(4, -3, len, 6); ctx.strokeRect(4, -3, len, 6); ctx.restore(); } } }
   renderLight();
   for (const f of Run.fx) if (f.type === 'itempop' || f.type === 'chestlight') drawFx(ctx, f);
   for (const p of Run.projs) if (p.kind !== 'arrow' && p.kind !== 'bone') drawProj(ctx, p);
@@ -1465,7 +1568,7 @@ function drawHUD() {
   const p = player(), H = canvas.height;
   // Spieler: HP, Mana, Gold
   ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(10, 10, 262, 70 + (Run.heroes.length - 1) * 22);
-  txt(p.name + '  Lv ' + p.level, 20, 18, 9, '#ffd25a');
+  txt(p.name + ' Lv ' + p.level + '  ' + HEROES[p.st.hero].name + ' ' + p.st.heroLvl, 20, 18, 9, '#ffd25a');
   bar(20, 34, 240, 12, p.hp / p.st.maxHp, '#e2483d'); txt(Math.ceil(p.hp) + ' / ' + Math.round(p.st.maxHp), 140, 36, 8, '#fff', 'center');
   bar(20, 54, 240, 6, p.mana / p.st.mana, '#4a8aff', '#0e1a3a');
   ctx.fillStyle = '#f4d03f'; ctx.fillRect(20, 66, 8, 8); txt(fmt(Run.gold), 34, 66, 9, '#ffd25a');
@@ -1564,7 +1667,7 @@ const statLine = (label, v, cmp, fmtf = x => x, invert = false) => {
 const pct = x => Math.round(x * 100) + ' %', pct1 = x => (Math.round(x * 1000) / 10) + ' %';
 function tooltipHTML(it, cmpItem) {
   const R = RARITY[it.rarity];
-  let h = `<div class="nm" style="color:${R.color}">${esc(itemName(it))}</div><div class="muted">${R.name} · ${it.slot === 'weapon' ? WEAPONS[it.type].name : it.slot === 'spell' ? 'Zauberspruch' : it.slot === 'jewel' ? 'Schmuck' : ARMOR_CLASS[it.cls].name + ' · ' + SLOT_NAMES[it.slot]}</div><div style="margin-top:6px">`;
+  let h = `<div class="nm" style="color:${it.set ? SET_COLOR : R.color}">${esc(itemName(it))}</div><div class="muted">${R.name}${it.set ? ' · Set' : ''} · ${it.slot === 'weapon' ? WEAPONS[it.type].name : it.slot === 'spell' ? 'Zauberspruch' : it.slot === 'jewel' ? 'Schmuck' : ARMOR_CLASS[it.cls].name + ' · ' + SLOT_NAMES[it.slot]}</div><div style="margin-top:6px">`;
   if (it.slot === 'spell') {
     const S = SPELLS[it.spell], st = spellStats(it);
     h += `<div>${esc(S.desc)}</div>${st.dmg ? `<div>Schaden: ${Math.round(st.dmg)}</div>` : ''}${S.heal ? `<div>Heilung: ${Math.round(S.heal * (1 + .2 * it.rarity) * 100)} % LP</div>` : ''}<div>Abklingzeit: ${st.cd.toFixed(1)} s</div><div>Mana: ${st.mana}</div>`;
@@ -1575,6 +1678,9 @@ function tooltipHTML(it, cmpItem) {
     h += statLine('Schaden', s.dmg, g('dmg')) + statLine('Verteidigung', s.def, g('def')) + statLine('Tempo', s.speed, g('speed'), x => (x > 0 ? '+' : '') + pct(x)) + statLine('Crit', s.crit, g('crit'), pct1)
       + statLine('Leben', s.hp, g('hp')) + statLine('Schaden', s.dmgp, g('dmgp'), x => '+' + x + ' %');
     if (it.slot === 'weapon') h += `<div class="muted">Angriffstempo: ${(1 / WEAPONS[it.type].cd).toFixed(1)}/s</div>`;
+    if (it.affix && it.affix.length) h += `<div style="margin-top:6px;color:#d8c8ff">${it.affix.map(a => '✦ ' + esc(bonusText(a.k, a.v))).join('<br>')}</div>`;
+    if (it.set) { const S = SETS[it.set], have = Object.values(Profile.data.equip).filter(x => x && x.set === it.set).length;
+      h += `<div style="margin-top:6px;color:${SET_COLOR}">Set: ${esc(S.name)} (${have}/6 angelegt)</div>` + [2, 4, 6].map(n => `<div style="color:${have >= n ? SET_COLOR : '#6a6a6a'}">${n} Teile: ${bonusList(S.bonus[n]).map(esc).join(', ')}</div>`).join(''); }
     if (cmpItem && cmpItem !== it) h += `<div class="muted" style="margin-top:4px">Vergleich mit: ${esc(itemName(cmpItem))}</div>`;
   }
   h += `</div><div class="gold" style="margin-top:6px">Wert: ${fmt(itemValue(it))} Gold${it.up ? ' · Stufe +' + it.up : ''}</div>`;
@@ -1658,21 +1764,21 @@ const UI = {
   refresh() { if (this.cur) this.show(this.cur[0], ...this.cur[1]); },
   topbar(title) {
     const d = Profile.data, need = Profile.xpNeed(d.level);
-    return `<div class="topbar"><div class="row"><span class="chip">👤 ${esc(d.name)}</span><span class="chip">Lv ${d.level} <span style="display:inline-block;width:70px;height:8px;background:#000;border:2px solid #3a2e44"><span style="display:block;height:100%;width:${Math.round(d.xp / need * 100)}%;background:#8fe05a"></span></span></span><span class="chip"><span class="coin"></span>${fmt(d.gold)}</span></div>${title ? `<h2 style="margin:0">${title}</h2>` : ''}</div>`;
+    return `<div class="topbar"><div class="row"><span class="chip">👤 ${esc(d.name)}</span><span class="chip">Lv ${d.level} <span style="display:inline-block;width:70px;height:8px;background:#000;border:2px solid #3a2e44"><span style="display:block;height:100%;width:${Math.round(d.xp / need * 100)}%;background:#8fe05a"></span></span></span><span class="chip">${HEROES[d.hero].icon} ${esc(HEROES[d.hero].name)} Lv ${d.heroes[d.hero].lvl}</span><span class="chip"><span class="coin"></span>${fmt(d.gold)}</span></div>${title ? `<h2 style="margin:0">${title}</h2>` : ''}</div>`;
   },
   lobby() {
     const n = Social.party.members.length;
     uiRoot.innerHTML = `<div class="screen clear">${this.topbar('')}
       <div id="lobbyMenu">
         <button class="btn big gold" id="bStart">⚔ Dungeon starten</button>
-        <div class="row"><button class="btn" id="bEquip">🛡 Ausrüstung</button><button class="btn" id="bFriends">👥 Freunde ${n > 1 ? '(' + n + '/4)' : ''}</button></div>
+        <div class="row"><button class="btn" id="bHero">${HEROES[Profile.data.hero].icon} Helden</button><button class="btn" id="bEquip">🛡 Ausrüstung</button></div>
+        <div class="row"><button class="btn" id="bFriends">👥 Freunde ${n > 1 ? '(' + n + '/4)' : ''}</button><button class="btn" id="bSet">⚙ Einstellungen</button></div>
         <div class="row"><button class="btn" id="bShop">💰 Händler</button><button class="btn" id="bSmith">🔨 Schmied</button></div>
-        <button class="btn" id="bSet">⚙ Einstellungen</button>
         <div class="s muted" style="text-align:center">Runs: ${Profile.data.runs} · Siege: ${Profile.data.wins}</div>
       </div></div>`;
     const go = (id, f) => document.getElementById(id).onclick = () => { Sound.init(); sfx('click'); f(); };
     go('bStart', () => this.show('party', true)); go('bEquip', () => this.show('equip')); go('bFriends', () => this.show('party', false));
-    go('bShop', () => this.show('shop')); go('bSmith', () => this.show('smith')); go('bSet', () => this.show('settings'));
+    go('bShop', () => this.show('shop')); go('bHero', () => this.show('heroes')); go('bSmith', () => this.show('smith')); go('bSet', () => this.show('settings'));
   },
   party(runMode) {
     const P = Social.party, me = P.members.find(m => m.id === 'me'), allReady = P.members.every(m => m.ready), leader = P.leader === 'me';
@@ -1720,7 +1826,7 @@ const UI = {
     document.getElementById('bBack').onclick = () => { sfx('click'); this.show('lobby'); };
   },
   equip() {
-    const d = Profile.data, st = heroStats(d.equip, d.level);
+    const d = Profile.data, st = Profile.stats(), H = HEROES[d.hero];
     uiRoot.innerHTML = `<div class="screen">${this.topbar('Ausrüstung')}
       <div class="row" style="align-items:flex-start;justify-content:center;width:min(1100px,100%)">
         <div class="panel col" style="align-items:center">
@@ -1735,6 +1841,8 @@ const UI = {
             <div>Schaden: ${Math.round(st.dmg)} · Crit: ${pct1(st.crit)}</div>
             <div>Tempo: ${st.speed >= 0 ? '+' : ''}${pct(st.speed)} · Mana-Regeneration: ${st.manaRegen.toFixed(1)}/s</div>
             <div class="muted">${esc(st.W.name)}: ${esc(st.W.hint)}</div>
+            <div style="margin-top:6px;color:${st.heroActive ? '#ffd25a' : '#8a7a6a'}">${H.icon} ${esc(H.name)} Lv ${Profile.hero().lvl}: ${st.heroActive ? bonusList(H.bonus(Profile.hero().lvl)).map(esc).join(', ') : 'Bonus inaktiv – braucht ' + esc(H.weapons === 'all' ? '' : H.weapons.map(w => WEAPONS[w].name).join('/'))}</div>
+            ${Object.entries(st.sets).filter(([, n]) => n >= 2).map(([id, n]) => `<div style="color:${SET_COLOR}">Set ${esc(SETS[id].name)} (${n}/6): ${[2, 4, 6].filter(t => n >= t).map(t => bonusList(SETS[id].bonus[t]).map(esc).join(', ')).join(' · ')}</div>`).join('')}
           </div>
         </div>
         <div class="panel col"><h3>Inventar</h3><div class="invgrid" id="inv"></div>
@@ -1744,7 +1852,7 @@ const UI = {
     const L = document.getElementById('eqL'), R = document.getElementById('eqR');
     [['helm', 'Helm'], ['chest', 'Brust'], ['pants', 'Hose']].forEach(([k, l]) => L.appendChild(slotEl('eq:' + k, l)));
     [['weapon', 'Waffe'], ['boots', 'Schuhe'], ['jewel', 'Schmuck']].forEach(([k, l]) => R.appendChild(slotEl('eq:' + k, l)));
-    const H = document.getElementById('hot'); for (let i = 0; i < 4; i++) H.appendChild(slotEl('hot:' + i, 'Zauber ' + (i + 1)));
+    const HB = document.getElementById('hot'); for (let i = 0; i < 4; i++) HB.appendChild(slotEl('hot:' + i, 'Zauber ' + (i + 1)));
     const I = document.getElementById('inv'); for (let i = 0; i < INV_SIZE; i++) I.appendChild(slotEl('inv:' + i, ''));
     document.getElementById('bBack').onclick = () => { sfx('click'); this.show('lobby'); };
   },
@@ -1769,7 +1877,34 @@ const UI = {
     document.getElementById('bRe').onclick = () => { if (d.gold < 25) { sfx('wrong'); return toast('Nicht genug Gold.'); } d.gold -= 25; this.restock(); sfx('coin'); this.refresh(); };
     document.getElementById('bBack').onclick = () => { sfx('click'); this.show('lobby'); };
   },
-  restock() { const d = Profile.data; d.shop = { level: d.level, items: Array.from({ length: 6 }, () => Math.random() < .06 ? makeSpell(rollRarity(.3)) : randomItem(rollRarity(.4), d.level)) }; Profile.save(); },
+  heroes() {
+    const d = Profile.data;
+    uiRoot.innerHTML = `<div class="screen">${this.topbar('Helden')}
+      <div class="s muted" style="max-width:900px;text-align:center;margin-bottom:10px">Jeder Held gibt einen eigenen Bonus und levelt einzeln mit (max. Level ${HERO_MAX}). Neue Helden schaltest du mit deinem Konto-Level frei.</div>
+      <div class="row" id="heroList" style="justify-content:center;align-items:stretch;width:min(1100px,100%)"></div>
+      <div class="row" style="margin-top:12px"><button class="btn" id="bBack">← Zurück</button></div></div>`;
+    const L = document.getElementById('heroList');
+    for (const [k, H] of Object.entries(HEROES)) {
+      const hd = d.heroes[k], open = Profile.heroUnlocked(k), sel = d.hero === k, need = heroXpNeed(hd.lvl);
+      const el = document.createElement('div'); el.className = 'panel col'; el.style.cssText = `width:200px;align-items:center;gap:8px;${sel ? 'border-color:#ffd25a' : ''}${open ? '' : ';filter:grayscale(.8) brightness(.7)'}`;
+      const c = document.createElement('canvas'); c.width = 16; c.height = 16; c.style.cssText = 'width:96px;height:96px;image-rendering:pixelated;background:radial-gradient(#3a2448,#120e16)';
+      c.getContext('2d').drawImage(heroSprite(Object.assign({}, Profile.look(), { hero: k, helm: null }), 0), 0, 0);
+      el.innerHTML = `<div style="font-size:11px">${H.icon} ${esc(H.name)}</div>`;
+      el.appendChild(c);
+      const info = document.createElement('div'); info.className = 's'; info.style.width = '100%';
+      info.innerHTML = open ? `<div>Level ${hd.lvl}${hd.lvl >= HERO_MAX ? ' (max)' : ''}</div><div style="height:8px;background:#000;border:2px solid #3a2e44;margin:4px 0"><div style="height:100%;width:${hd.lvl >= HERO_MAX ? 100 : Math.round(hd.xp / need * 100)}%;background:#ffd25a"></div></div>`
+        : `<div style="color:#ff8a7a">🔒 Ab Konto-Level ${H.unlock}</div>`;
+      info.innerHTML += `<div class="muted" style="margin:6px 0">${esc(H.desc)}</div><div>Waffen: ${H.weapons === 'all' ? 'alle' : H.weapons.map(w => WEAPONS[w].name).join(', ')}</div>`
+        + `<div style="color:#ffd25a;margin-top:4px">${bonusList(H.bonus(hd.lvl)).map(esc).join('<br>')}</div>`
+        + (open && hd.lvl < HERO_MAX ? `<div class="muted" style="margin-top:4px">Level ${hd.lvl + 1}: ${bonusList(H.bonus(hd.lvl + 1)).map(esc).join(', ')}</div>` : '');
+      el.appendChild(info);
+      const b = document.createElement('button'); b.className = 'btn small ' + (sel ? 'gold' : ''); b.textContent = sel ? 'Ausgewählt' : open ? 'Spielen' : 'Gesperrt'; b.disabled = !open || sel;
+      b.onclick = () => { d.hero = k; Profile.save(); Social.updateMe(meInfo()); sfx('levelup'); toast(H.name + ' ausgewählt!'); this.refresh(); };
+      el.appendChild(b); L.appendChild(el);
+    }
+    document.getElementById('bBack').onclick = () => { sfx('click'); this.show('lobby'); };
+  },
+  restock() { const d = Profile.data; d.shop = { level: d.level, items: Array.from({ length: 6 }, () => Math.random() < .06 ? makeSpell(rollRarity(.3)) : randomItem(rollRarity(.4), d.level, .1)) }; Profile.save(); },
   buy(i, price) { const d = Profile.data, it = d.shop.items[i]; if (!it) return; if (d.gold < price) { sfx('wrong'); return toast('Nicht genug Gold.'); } if (!d.inv.includes(null)) { sfx('wrong'); return toast('Inventar ist voll.'); }
     d.gold -= price; Profile.give(it); d.shop.items[i] = null; sfx('coin'); toast(itemName(it) + ' gekauft!'); Profile.save(); this.refresh(); },
   smith(selLoc) {
@@ -1820,7 +1955,9 @@ const UI = {
         <div class="s" style="width:100%">
           <div class="loot-line">Räume erkundet: ${r.rooms} / ${r.total} · Gegner besiegt: ${r.kills} · Zeit: ${mm}:${String(ss).padStart(2, '0')}</div>
           <div class="loot-line gold">Gold: +${fmt(r.gold)}${r.lost ? ` <span style="color:#ff6a5a">(−${fmt(r.lost)} verloren)</span>` : ''}</div>
-          <div class="loot-line" style="color:#8fe05a">Erfahrung: +${r.xp}${r.ups ? ` · LEVEL UP! Jetzt Level ${r.level}` : ''}</div>
+          <div class="loot-line" style="color:#8fe05a">Erfahrung: +${r.xp}${r.ups ? ` · LEVEL UP! Konto-Level ${r.level}` : ''}</div>
+          <div class="loot-line" style="color:#ffd25a">${HEROES[r.hero].icon} ${esc(HEROES[r.hero].name)}: +${r.xp} Helden-EP${r.heroUps ? ` · Held steigt auf Level ${r.heroLvl}!` : ''}</div>
+          ${Object.values(HEROES).filter(H => H.unlock > r.level - r.ups && H.unlock <= r.level).map(H => `<div class="loot-line" style="color:#ff8c1a">🔓 Neuer Held freigeschaltet: ${H.icon} ${esc(H.name)}!</div>`).join('')}
           <div style="margin-top:8px">Beute:</div>
           ${r.items.length ? r.items.map(x => `<div class="loot-line" style="color:${RARITY[x.it.rarity].color}">◆ ${esc(itemName(x.it))} <span class="muted">(${RARITY[x.it.rarity].name}${x.ok ? '' : ', Inventar voll → verkauft'})</span></div>`).join('') : '<div class="loot-line muted">Keine Gegenstände gefunden.</div>'}
         </div>
@@ -1886,7 +2023,14 @@ const Touch = {
       b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); Sound.init(); b.classList.add('down'); down(); b.setPointerCapture(e.pointerId); });
       const end = e => { b.classList.remove('down'); up && up(); }; b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end); this.el.appendChild(b); return b; };
     // Zauber: einfach auf die Hotbar unten tippen
-    mk('⚔', 'right:3vmin;bottom:4vmin;width:17vmin;height:17vmin;font-size:6vmin', () => Input.attack = true, () => Input.attack = false);
+    { // Angriff: antippen = automatisch zielen, ziehen = selbst zielen, loslassen = zuschlagen/schießen
+      const b = document.createElement('div'); b.className = 'tbtn'; b.style.cssText += 'right:3vmin;bottom:4vmin;width:19vmin;height:19vmin;font-size:6vmin'; b.innerHTML = '<span style="position:absolute;pointer-events:none">⚔</span><i style="position:absolute;width:8vmin;height:8vmin;border-radius:50%;background:#ffffff40;display:none;pointer-events:none"></i>';
+      const knob = b.querySelector('i'); let pid = null, x0 = 0, y0 = 0;
+      b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); Sound.init(); pid = e.pointerId; x0 = e.clientX; y0 = e.clientY; Object.assign(Input.stick, { on: true, dx: 0, dy: 0, t: 0 }); b.classList.add('down'); knob.style.display = 'block'; knob.style.transform = ''; b.setPointerCapture(pid); });
+      b.addEventListener('pointermove', e => { if (e.pointerId !== pid) return; let dx = e.clientX - x0, dy = e.clientY - y0; const l = Math.hypot(dx, dy), m = Math.min(innerWidth, innerHeight) * .09; if (l > m) { dx = dx / l * m; dy = dy / l * m; } Input.stick.dx = dx / m; Input.stick.dy = dy / m; knob.style.transform = `translate(${dx}px,${dy}px)`; });
+      const end = e => { if (e.pointerId !== pid) return; pid = null; const S = Input.stick, l = Math.hypot(S.dx, S.dy); if (S.t <= .35 || l > .3) Input.release = { dir: l > .3 ? Math.atan2(S.dy, S.dx) : null }; S.on = false; S.dx = S.dy = 0; b.classList.remove('down'); knob.style.display = 'none'; };
+      b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end); this.el.appendChild(b);
+    }
     mk('💨', 'right:22vmin;bottom:3vmin;width:10vmin;height:10vmin;font-size:4vmin', () => Input.dodge = true);
     mk('✋', 'right:5vmin;bottom:23vmin;width:10vmin;height:10vmin;font-size:4vmin', () => { Input.interactPressed = true; Input.interact = true; }, () => Input.interact = false);
     mk('II', 'right:1.5vmin;top:1.5vmin;width:7vmin;height:7vmin;font-size:2.4vmin;border-radius:10px', () => togglePause());
