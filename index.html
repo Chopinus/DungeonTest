@@ -369,20 +369,22 @@ function rollRarity(bonus = 0) {
   // bonus verschiebt die Wahrscheinlichkeit Richtung selten
   return RARITY.indexOf(weighted(RARITY, r => r.weight * (RARITY.indexOf(r) ? 1 + bonus : 1)));
 }
+// Gegenstandsstufe (ilvl) 1–20: jede Stufe +12 % Grundwerte
+const tierMult = ilvl => 1 + (clamp(ilvl, 1, 20) - 1) * .12;
 function makeWeapon(type, rarity, ilvl = 1) {
-  const W = WEAPONS[type], m = RARITY[rarity].mult * (1 + (ilvl - 1) * .08);
+  ilvl = clamp(Math.round(ilvl), 1, 20); const W = WEAPONS[type], m = RARITY[rarity].mult * tierMult(ilvl);
   const name = adjName(pick(PREFIX[rarity]), pick(WEAPON_NAMES[type])) + (rarity >= 2 ? pick(SUFFIX) : '');
   return { id: uid(), slot: 'weapon', type, rarity, name, up: 0, ilvl,
     stats: { dmg: Math.round(W.dmg * m * rand(.92, 1.08)), crit: +(W.crit + rarity * .02).toFixed(2), speed: W.speed, def: 0, hp: rarity >= 2 ? rint(5, 15) * rarity : 0 } };
 }
 function makeArmor(slot, cls, rarity, ilvl = 1) {
-  const C = ARMOR_CLASS[cls], S = ARMOR_SLOTS[slot], m = RARITY[rarity].mult * (1 + (ilvl - 1) * .08);
+  ilvl = clamp(Math.round(ilvl), 1, 20); const C = ARMOR_CLASS[cls], S = ARMOR_SLOTS[slot], m = RARITY[rarity].mult * tierMult(ilvl);
   const name = adjName(rarity ? pick(PREFIX[rarity]) : '', C.name + '-' + S.name);
   return { id: uid(), slot, cls, rarity, name, up: 0, ilvl,
-    stats: { def: +(C.def * S.m * m * 2).toFixed(1), speed: +(C.speed * S.m).toFixed(3), hp: rarity >= 1 ? rint(2, 6) * rarity : 0, crit: 0, dmg: 0, mana: C.mana } };
+    stats: { def: +(C.def * S.m * m * 2).toFixed(1), speed: +(C.speed * S.m).toFixed(3), hp: Math.round((rarity >= 1 ? rint(2, 6) * rarity : 0) + (ilvl - 1) * 3 * S.m), crit: 0, dmg: 0, mana: C.mana } };
 }
 function makeJewel(rarity, ilvl = 1) {
-  const type = Math.random() < .5 ? 'ring' : 'amulet', gem = pick(GEMS), m = RARITY[rarity].mult;
+  ilvl = clamp(Math.round(ilvl), 1, 20); const type = Math.random() < .5 ? 'ring' : 'amulet', gem = pick(GEMS), m = RARITY[rarity].mult * (1 + (ilvl - 1) * .06);
   const st = { dmg: 0, crit: 0, hp: 0, def: 0, speed: 0 };
   const opts = ['crit', 'hp', 'dmgp', 'speed'];
   for (let i = 0; i < 1 + Math.min(rarity, 2); i++) {
@@ -666,6 +668,18 @@ const DIFFS = [
   { n: 'IV', mult: 3, loot: .8, stars: { 3: 10, 4: 65, 5: 25 } },
   { n: 'V', mult: 4.2, loot: 1.2, stars: { 4: 45, 5: 55 } },
 ];
+/* ---------- Balance: Ausrüstungsstufe & Gegnerstärke ----------
+   Ausrüstungsstufe 1–20: Schwierigkeit I = Stufe 1–4 (je 2 Stages eine Stufe höher), II = 5–8, III = 9–12, IV = 13–16, V = 17–20.
+   Gegnerstärke wächst innerhalb einer Schwierigkeit nur langsam (nähert sich +4,5 an) – eine Schwierigkeit höher gibt +5.
+   Deshalb ist Stage 10 auf I immer noch leichter als Stage 1 auf II. */
+const gearTier = (diff, stage) => clamp(diff * 4 + Math.min(4, Math.ceil(stage / 2)), 1, 20);
+const enemyLevel = (diff, stage) => diff * 5 + 4.5 * (1 - Math.pow(.8, stage - 1));
+const ENEMY_HP_GROWTH = 1.17, ENEMY_DMG_GROWTH = 1.14;
+// Mehr Spieler = stärkere Gegner (pro zusätzlichem Spieler)
+const PARTY_HP = .55, PARTY_DMG = .1, PARTY_BOSS_HP = .7;
+// Händler in der Lobby: Stufe passend zur höchsten freigeschalteten Schwierigkeit
+const shopTier = () => { const dc = (Profile.data && Profile.data.dclear) || {}; const m = Math.min(4, Math.max(0, ...Object.values(dc))); return clamp(m * 4 + 2, 1, 20); };
+const tierRange = diff => `${diff * 4 + 1}–${diff * 4 + 4}`;
 const rollStars = diff => { const w = DIFFS[diff].stars, ks = Object.keys(w).map(Number); return weighted(ks, k => w[k]); };
 
 /* ---------- Artefakte ---------- */
@@ -732,6 +746,14 @@ function artStats(eq) {
   for (const k of ART_ORDER) { const a = eq && eq[k]; if (!a) continue; o[a.main] = (o[a.main] || 0) + artMainVal(a); for (const s of a.subs) o[s.k] = (o[s.k] || 0) + s.v; sets[a.set] = (sets[a.set] || 0) + 1; }
   return { o, sets };
 }
+
+/* ---------- Antike Räume: optionale Prüfung (Wellen oder Mini-Boss) → Artefakt ---------- */
+const MINIBOSSES = [
+  { base: 'skeleton', name: 'Grabritter Valdor', col: '#c8c0b0', adds: ['skeleton', 'bat'] },
+  { base: 'spider', name: 'Brutmutter Skarra', col: '#8fe05a', adds: ['spider', 'spider'] },
+  { base: 'brute', name: 'Magmakoloss', col: '#ff7a2a', adds: ['wisp', 'wisp'] },
+  { base: 'archer', name: 'Eisjägerin Runa', col: '#9ae8ff', adds: ['wisp', 'skeleton'] },
+];
 
 /* ---------- Helden-Fähigkeiten (Taste Q / ✨) ---------- */
 const ABILITIES = {
@@ -850,7 +872,9 @@ function generateDungeon(level, partySize, stage = 1) {
     if (mids[0] !== 'combat') { const ci = mids.indexOf('combat'); if (ci > 0) [mids[0], mids[ci]] = [mids[ci], mids[0]]; }
     let prev = null;
     main.forEach(([gx, gy], i) => { const r = mk(gx, gy, i === 0 ? 'start' : i === main.length - 1 ? 'boss' : mids[i - 1]); r.depth = i; if (prev) link(prev, r); prev = r; });
-    for (const br of branches) { let p = rooms.get(K(...br.from)); br.cells.forEach(([gx, gy], i) => { const r = mk(gx, gy, i === br.cells.length - 1 ? 'loot' : pick(['combat', 'trap'])); r.depth = p.depth + 1; link(p, r); p = r; }); }
+    branches.forEach((br, bi) => { let p = rooms.get(K(...br.from)); br.cells.forEach(([gx, gy], i) => { const r = mk(gx, gy, i === br.cells.length - 1 ? (bi === 0 ? 'ancient' : 'loot') : pick(['combat', 'trap'])); r.depth = p.depth + 1; link(p, r); p = r; }); });
+    // Genau ein antiker Raum pro Stage (meist am Ende eines Nebenwegs, also optional)
+    if (![...rooms.values()].some(r => r.type === 'ancient')) { const c = [...rooms.values()].filter(r => r.type === 'combat' && r.depth > 1); if (c.length) pick(c).type = 'ancient'; else continue; }
     // Bossraum darf nur eine Tür haben
     const boss = [...rooms.values()].find(r => r.type === 'boss');
     if (Object.values(boss.doors).filter(Boolean).length !== 1) continue;
@@ -891,14 +915,20 @@ function buildRoom(r, level, partySize) {
     xs.forEach(x => obj({ type: 'chest', tx: x, ty: 5, solid: true, open: false, rarity: rollRarity(.2 + r.depth * .05 + (r.stage - 1) * .12), mimic: Math.random() < .16 }));
     for (const [x, y] of [[3, 3], [16, 3], [3, 8], [16, 8]]) g[y][x] = Math.random() < .5 ? 2 : 4;
   }
+  if (r.type === 'ancient') { // Antiker Raum: optionale Prüfung am Relikt
+    r.trial = 'idle'; r.trialMode = Math.random() < .5 ? 'waves' : 'mini';
+    obj({ type: 'relic', tx: 10, ty: 5, solid: true });
+    for (const [x, y] of [[4, 3], [15, 3], [4, 8], [15, 8]]) g[y][x] = 5;
+    for (const [x, y] of [[7, 2], [12, 2], [7, 9], [12, 9]]) obj({ type: 'candle', tx: x, ty: y });
+  }
   if (r.type === 'shrine') { // Schrein mit zufälligem Segen oder Pakt
     obj({ type: 'shrine', tx: 10, ty: 5, solid: true, kind: pick(Object.keys(SHRINES)), used: false });
     for (const [x, y] of [[7, 3], [13, 3], [7, 8], [13, 8]]) obj({ type: 'candle', tx: x, ty: y });
   }
   if (r.type === 'merchant') { // Händler mitten im Dungeon: Gold sofort ausgeben, bevor man es verliert
-    const st = r.stage || 1, gm = (1 + (level - 1) * .1) * (1 + (st - 1) * .2), D = (typeof Run !== 'undefined' && Run.dungeonId) ? DUNGEON_BY[Run.dungeonId] : DUNGEONS[0], diff = (typeof Run !== 'undefined' && Run.diff) || 0;
+    const st = r.stage || 1, gm = 1 + enemyLevel((typeof Run !== 'undefined' && Run.diff) || 0, st) * .2, D = (typeof Run !== 'undefined' && Run.dungeonId) ? DUNGEON_BY[Run.dungeonId] : DUNGEONS[0], diff = (typeof Run !== 'undefined' && Run.diff) || 0;
     obj({ type: 'npc', tx: 10, ty: 3, solid: true });
-    const gear = randomItem(Math.max(1, rollRarity(1 + DIFFS[diff].loot)), level + (st - 1) * 2, .3);
+    const gear = randomItem(Math.max(1, rollRarity(1 + DIFFS[diff].loot)), Math.min(20, gearTier(diff, st) + 1), .3);
     const spec = Math.random() < .6 ? makeArtifact(D.set, rollStars(diff)) : (s => (s.name = 'Schriftrolle: ' + SPELLS[s.spell].name, s))(makeSpell(Math.max(1, rollRarity(1.5))));
     const wares = [{ it: { slot: 'potion', name: 'Heiltrank', rarity: 0 }, price: Math.round(POTION_PRICE * (1 + (st - 1) * .25)) },
       { it: gear, price: Math.round(itemValue(gear) * 1.6) },
@@ -1053,6 +1083,10 @@ function renderRoomBg(r) {
     for (let i = 0; i < 9; i++) { x.fillStyle = '#f0d070'; x.fillRect(70 + i * 23, 95, 3, 3); } }
   if (r.type === 'loot') { x.fillStyle = '#5a1a22'; x.fillRect(64, 56, 192, 80); x.fillStyle = '#7a2430'; x.fillRect(68, 60, 184, 72); x.strokeStyle = '#c8a040'; x.strokeRect(71.5, 63.5, 177, 65); for (let i = 0; i < 6; i++) { x.fillStyle = '#c8a040'; x.fillRect(84 + i * 30, 95, 3, 3); } }
   if (r.type === 'boss') { x.fillStyle = 'rgba(90,20,30,.6)'; x.fillRect(VW / 2 - 14, 0, 28, VH); x.fillStyle = 'rgba(200,160,60,.35)'; x.fillRect(VW / 2 - 14, 0, 1, VH); x.fillRect(VW / 2 + 13, 0, 1, VH); }
+  if (r.type === 'ancient') { // uralter Runenkreis
+    x.strokeStyle = 'rgba(180,140,255,.35)'; for (const rr2 of [52, 44, 36]) { x.beginPath(); x.arc(168, 92, rr2, 0, Math.PI * 2); x.stroke(); }
+    for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; drawSymbol(x, i % 4, Math.round(168 + Math.cos(a) * 48), Math.round(92 + Math.sin(a) * 48), 'rgba(200,170,255,.45)'); }
+    for (let i = 0; i < 14; i++) { x.fillStyle = 'rgba(60,90,50,.5)'; x.fillRect(rint(1, 18) * T + rint(0, 12), rint(1, 10) * T + rint(0, 12), rint(2, 5), 1); } }
   if (r.type === 'shrine') { x.fillStyle = 'rgba(255,230,160,.08)'; x.beginPath(); x.arc(168, 92, 46, 0, Math.PI * 2); x.fill(); x.strokeStyle = 'rgba(255,220,140,.25)'; x.beginPath(); x.arc(168, 92, 40, 0, Math.PI * 2); x.stroke();
     for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; x.fillStyle = 'rgba(255,220,140,.3)'; x.fillRect(Math.round(168 + Math.cos(a) * 40) - 1, Math.round(92 + Math.sin(a) * 40) - 1, 3, 3); } }
   if (r.type === 'merchant') { x.fillStyle = '#3a2412'; x.fillRect(72, 82, 176, 36); x.fillStyle = '#5a3a1e'; x.fillRect(74, 84, 172, 32); x.strokeStyle = '#a8823a'; x.strokeRect(77.5, 87.5, 165, 25);
@@ -1157,6 +1191,10 @@ function drawObj(c, o, r, time) {
     case 'shrine': { const S = SHRINES[o.kind], gl = o.used ? .25 : .6 + Math.sin(time * 3) * .3;
       c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(px - 2, py + 13, 20, 3); c.fillStyle = '#5a5468'; c.fillRect(px - 1, py + 6, 18, 9); c.fillStyle = '#7a748a'; c.fillRect(px - 2, py + 5, 20, 2); c.fillStyle = '#3a3448'; c.fillRect(px + 2, py + 9, 12, 4);
       c.fillStyle = '#6c667c'; c.fillRect(px + 5, py - 4, 6, 10); c.globalAlpha = gl; c.fillStyle = o.used ? '#5a5468' : S.col; c.fillRect(px + 6, py - 8 + Math.round(Math.sin(time * 2) * 1.5), 4, 4); c.globalAlpha = 1; break; }
+    case 'relic': { const act = r.trial === 'active', done = r.trial === 'done', gl = done ? .2 : .55 + Math.sin(time * 4) * .35;
+      c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(px - 3, py + 13, 22, 3); c.fillStyle = '#4a4058'; c.fillRect(px - 2, py + 4, 20, 11); c.fillStyle = '#6c667c'; c.fillRect(px - 3, py + 3, 22, 2);
+      drawSymbol(c, Math.floor(time * 2) % 4, px + 8, py + 9, done ? '#5a5468' : '#c8a8ff');
+      c.globalAlpha = gl; c.fillStyle = act ? '#ff4a6a' : done ? '#5a5468' : '#b48cff'; c.beginPath(); c.moveTo(px + 8, py - 9 + Math.sin(time * 2) * 1.5); c.lineTo(px + 13, py - 3); c.lineTo(px + 8, py + 2); c.lineTo(px + 3, py - 3); c.fill(); c.globalAlpha = 1; break; }
     case 'candle': { const f = Math.floor(time * 9 + o.tx) % 2; c.fillStyle = '#e8dcb0'; c.fillRect(px + 7, py + 8, 3, 6); c.fillStyle = '#ff9a3c'; c.fillRect(px + 7, py + 5 + f, 3, 3); c.fillStyle = '#fff2a0'; c.fillRect(px + 8, py + 6 + f, 1, 2); break; }
     case 'npc': { c.fillStyle = 'rgba(0,0,0,.5)'; c.beginPath(); c.ellipse(px + 8, py + 15, 7, 2.5, 0, 0, Math.PI * 2); c.fill(); c.drawImage(sprite('merchant', { N: '#4a2c6a', n: '#6a4a2a' }, 'm'), px, py - 2 + Math.round(Math.sin(time * 2))); break; }
     case 'ware': { c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(px + 1, py + 13, 14, 3); c.fillStyle = '#5a3a1e'; c.fillRect(px + 2, py + 8, 12, 6); c.fillStyle = '#8a5a30'; c.fillRect(px + 1, py + 7, 14, 2);
@@ -1243,8 +1281,8 @@ function makeHero(m, isPlayer) {
   let equip, level = m.level;
   if (isPlayer) equip = Profile.data.equip;
   else { // Mitspieler bekommen passende Ausrüstung zu ihrem Level
-    const rr = () => clamp(Math.floor(level / 5) + (Math.random() < .3 ? 1 : 0), 0, 3);
-    equip = { weapon: makeWeapon(m.weapon, rr(), level), helm: m.look.helm ? makeArmor('helm', m.look.helm, rr(), level) : null, chest: makeArmor('chest', m.look.chest, rr(), level), pants: makeArmor('pants', m.look.pants, rr(), level), boots: makeArmor('boots', m.look.boots, rr(), level), jewel: null };
+    const rr = () => clamp(Math.floor(level / 5) + (Math.random() < .3 ? 1 : 0), 0, 3), tl = gearTier(Run.diff || 0, 2);
+    equip = { weapon: makeWeapon(m.weapon, rr(), tl), helm: m.look.helm ? makeArmor('helm', m.look.helm, rr(), tl) : null, chest: makeArmor('chest', m.look.chest, rr(), tl), pants: makeArmor('pants', m.look.pants, rr(), tl), boots: makeArmor('boots', m.look.boots, rr(), tl), jewel: null };
   }
   let heroId, heroLvl;
   if (isPlayer) { heroId = Profile.data.hero; heroLvl = Profile.hero().lvl; }
@@ -1259,8 +1297,10 @@ function healHero(h, n, quiet = false) { if (h.downed || h.out) return; if (!qui
 
 /* ---------- Gegner ---------- */
 // Jede Stage macht Gegner deutlich stärker
-function scaleMult() { const r = Run.room, s = Run.stage - 1, D = DIFFS[Run.diff || 0]; return { hp: (1 + (Run.level - 1) * .13 + (r.depth || 0) * .05) * (1 + .4 * (Run.party - 1)) * (1 + s * .3) * D.mult * Run.ehp * (Run.mod === 'gold' ? 1.4 : 1), dmg: (1 + (Run.level - 1) * .08 + (r.depth || 0) * .03 + s * .14) * (1 + (D.mult - 1) * .55) }; }
-const lootLvl = () => Run.level + (Run.stage - 1) * 2 + (Run.diff || 0) * 3, goldMult = () => (1 + (Run.level - 1) * .1) * (1 + (Run.stage - 1) * .2) * (1 + (Run.diff || 0) * .35) * Run.goldx * (Run.mod === 'gold' ? 2 : 1) * (Run.mod === 'fallen' && Run.room && Run.room.type === 'trap' ? 1.6 : 1);
+// Gegnerstärke: Schwierigkeit + Stage (siehe enemyLevel) + Raumtiefe; pro zusätzlichem Spieler mehr Leben und etwas mehr Schaden
+const runE = () => enemyLevel(Run.diff || 0, Run.stage) + ((Run.room && Run.room.depth) || 0) * .08;
+function scaleMult() { const E = runE(), P = Run.party - 1; return { hp: Math.pow(ENEMY_HP_GROWTH, E) * (1 + PARTY_HP * P) * Run.ehp * (Run.mod === 'gold' ? 1.4 : 1), dmg: Math.pow(ENEMY_DMG_GROWTH, E) * (1 + PARTY_DMG * P) }; }
+const lootLvl = () => gearTier(Run.diff || 0, Run.stage), goldMult = () => (1 + runE() * .2) * Run.goldx * (Run.mod === 'gold' ? 2 : 1) * (Run.mod === 'fallen' && Run.room && Run.room.type === 'trap' ? 1.6 : 1);
 function spawnEnemy(type, x, y) {
   const D = ENEMIES[type], m = scaleMult();
   const e = { kind: 'enemy', spawnT: .4, type, D, x, y, r: D.r, hp: D.hp * m.hp, maxHp: D.hp * m.hp, dmg: D.dmg * m.dmg, speed: D.speed * rand(.9, 1.1), vx: 0, vy: 0, kb: { x: 0, y: 0 },
@@ -1275,7 +1315,7 @@ function spawnWithWarning(type, pos, delay = .8, elite = false) {
 function startWave() {
   const r = Run.room, list = r.waves[Run.waveIdx]; if (!list) return;
   sfx('spawn'); banner('Welle ' + (Run.waveIdx + 1) + ' / ' + r.waves.length, '', 1.4, '#ff8a6a');
-  list.forEach((t, i) => spawnWithWarning(t, freeSpot(70), .8 + i * .12, Math.random() < eliteChance()));
+  list.forEach((t, i) => spawnWithWarning(t, freeSpot(70), .8 + i * .12, (r.trialElites && i < 1 + Run.waveIdx) || Math.random() < eliteChance()));
 }
 
 /* ---------- Schaden ---------- */
@@ -1295,7 +1335,7 @@ function hurtEnemy(e, dmg, crit, srcX, srcY, knock = 60, by = null) {
   e.hp -= dmg;
   if (by && by.st.lifesteal && !by.downed) by.hp = Math.min(by.st.maxHp, by.hp + dmg * (by.st.lifesteal + (by.rageT > 0 ? .08 : 0))); // Lebensraub
   e.flash = .12; Run.hitstop = Math.max(Run.hitstop, crit ? .06 : .025);
-  const a = Math.atan2(e.y - srcY, e.x - srcX), res = e.boss ? .15 : e.D.heavy || e.elite ? .4 : 1; e.kb.x += Math.cos(a) * knock * res; e.kb.y += Math.sin(a) * knock * res;
+  const a = Math.atan2(e.y - srcY, e.x - srcX), res = e.boss ? .15 : e.mini ? .1 : e.D.heavy || e.elite ? .4 : 1; e.kb.x += Math.cos(a) * knock * res; e.kb.y += Math.sin(a) * knock * res;
   num(e.x + rand(-3, 3), e.y - 10, Math.round(dmg), crit ? '#ffd25a' : '#ffffff', crit);
   Run.fx.push({ type: 'hit', x: e.x + rand(-2, 2), y: e.y - e.r, t: 0, dur: crit ? .22 : .14, crit, a: Math.atan2(e.y - srcY, e.x - srcX) });
   burst(e.x, e.y, e.type === 'slime' || e.type === 'minislime' ? ['#3c9a46', '#8fe05a'] : e.type === 'bat' ? ['#6a3a8e', '#3a2448'] : ['#e8e2d0', '#9a94a8'], crit ? 10 : 5, crit ? 90 : 60, .4);
@@ -1315,9 +1355,10 @@ function killEnemy(e) {
   if (e.boss) return bossDefeated(e);
   const kb = e.lastBy; if (kb && kb.st && kb.st.aset.knochenkrone === 4) for (let i = 0; i < 3; i++) { const aa = rand(Math.PI * 2); Run.projs.push({ x: e.x, y: e.y - 3, vx: Math.cos(aa) * 150, vy: Math.sin(aa) * 150, r: 2, dmg: kb.st.dmg * .4, crit: false, team: 'hero', kind: 'bone', life: .9, knock: 40, col: '#e8e2d0', pierce: 0, hit: new Set([e]), by: kb }); }
   if (e.elite) eliteDeath(e);
+  if (e.mini) { Run.miniDown = true; Run.mini = null; dropGold(e.x, e.y, Math.round(40 * goldMult())); shake(8); sfx('victory'); for (const o of Run.enemies) if (!o.dead && o !== e) killEnemy(o); }
   if (e.type === 'mimic') giveLoot(e.loot || randomItem(2, lootLvl(), .4), e.x, e.y);
   const D = e.D, n = rint(D.gold[0], D.gold[1]) * goldMult();
-  dropGold(e.x, e.y, Math.round(n)); Run.xp += D.xp;
+  dropGold(e.x, e.y, Math.round(n)); Run.xp += Math.round(D.xp * (1 + runE() * .15));
   if (D.split) for (let i = 0; i < 2; i++) { const m = spawnEnemy('minislime', e.x + rand(-6, 6), e.y + rand(-6, 6)); m.kb.x = rand(-80, 80); m.kb.y = rand(-80, 80); }
 }
 function dropGold(x, y, amount) {
@@ -1482,11 +1523,12 @@ function updateCompanion(h, dt) {
 function nearestHero(e) { let best = null, bd = 1e9; for (const h of aliveHeroes()) { if (h.veilT > 0) continue; const d = Math.hypot(h.x - e.x, h.y - e.y); if (d < bd) { bd = d; best = h; } } return [best, bd]; }
 function updateEnemy(e, dt) {
   e.anim += dt; e.flash = Math.max(0, e.flash - dt); e.touchCd -= dt; e.tpCd -= dt;
-  if (e.burn > 0) { e.burn -= dt; e.burnT = (e.burnT || 0) - dt; if (e.burnT <= 0) { e.burnT = .5; hurtEnemy(e, 3 + Run.level, false, e.x, e.y, 0); burst(e.x, e.y - 4, ['#ff7a2a', '#f4d03f'], 3, 20, .4, 1, -40); } if (e.dead) return; }
+  if (e.burn > 0) { e.burn -= dt; e.burnT = (e.burnT || 0) - dt; if (e.burnT <= 0) { e.burnT = .5; hurtEnemy(e, 3 + e.maxHp * .015, false, e.x, e.y, 0); burst(e.x, e.y - 4, ['#ff7a2a', '#f4d03f'], 3, 20, .4, 1, -40); } if (e.dead) return; }
   // Rückstoß
   moveEnt(e, e.kb.x * dt, e.kb.y * dt); e.kb.x *= Math.pow(.0015, dt); e.kb.y *= Math.pow(.0015, dt);
   if (e.frozen > 0) { e.frozen -= dt; return; }
   if (e.boss) return updateBoss(e, dt);
+  if (e.mini) updateMiniBoss(e, dt);
   const [h, d] = nearestHero(e); if (!h) return;
   const a = Math.atan2(h.y - e.y, h.x - e.x); e.face = Math.cos(a) >= 0 ? 1 : -1;
   const AI = e.D.ai;
@@ -1535,9 +1577,9 @@ function separate() {
 
 /* ---------- Boss: Knochenkönig mit 3 Phasen ---------- */
 function spawnBoss() {
-  const m = (1 + (Run.level - 1) * .15) * (1 + .6 * (Run.party - 1)) * (1 + (Run.stage - 1) * .35);
-  const B = BOSSES[DUNGEON_BY[Run.dungeonId || 'krypta'].boss], D = DIFFS[Run.diff || 0];
-  const b = { kind: 'enemy', boss: true, type: 'boss', D: B, x: VW / 2, y: VH / 2 - 10, r: B.r, hp: B.hp * m * D.mult, maxHp: B.hp * m * D.mult, dmg: B.dmg * (1 + (Run.level - 1) * .08 + (Run.stage - 1) * .14) * (1 + (D.mult - 1) * .5), speed: B.speed * (Run.mod === 'hektik' ? 1.25 : 1),
+  const E = runE(), m = Math.pow(ENEMY_HP_GROWTH, E) * (1 + PARTY_BOSS_HP * (Run.party - 1));
+  const B = BOSSES[DUNGEON_BY[Run.dungeonId || 'krypta'].boss];
+  const b = { kind: 'enemy', boss: true, type: 'boss', D: B, x: VW / 2, y: VH / 2 - 10, r: B.r, hp: B.hp * m, maxHp: B.hp * m, dmg: B.dmg * Math.pow(ENEMY_DMG_GROWTH, E) * (1 + PARTY_DMG * (Run.party - 1)), speed: B.speed * (Run.mod === 'hektik' ? 1.25 : 1),
     kb: { x: 0, y: 0 }, flash: 0, frozen: 0, burn: 0, anim: 0, face: 1, phase: 1, state: 'idle', t: 2, inv: 0, touchCd: 0, tpCd: 0, wob: 0 };
   Run.enemies.push(b); Run.boss = b; sfx('roar'); shake(8); banner(B.name, 'Phase 1', 2.6, '#ff5a4a');
 }
@@ -1690,6 +1732,7 @@ function interact(h) {
   for (const o of r.objs) {
     if (o.type === 'chest' && !o.open && near(o, 22)) return openChest(o);
     if (o.type === 'shrine' && !o.used && near(o, 24)) return useShrine(o);
+    if (o.type === 'relic' && r.trial === 'idle' && near(o, 26)) return startTrial(r);
     if (o.type === 'ware' && !o.sold && near(o, 20)) return buyWare(o);
     if (o.type === 'lever' && near(o)) {
       if (o.reset) { r.objs.forEach(b => { if (b.type === 'block') { b.tx = b.ox; b.ty = b.oy; } }); sfx('lever'); o.on = !o.on; banner('', 'Blöcke zurückgesetzt', 1.2); return; }
@@ -1711,6 +1754,7 @@ function interactHint(h) {
   for (const o of r.objs) {
     if (o.type === 'chest' && !o.open && near(o, 22)) return 'Truhe öffnen';
     if (o.type === 'shrine' && !o.used && near(o, 24)) return 'Schrein berühren: ' + SHRINES[o.kind].name;
+    if (o.type === 'relic' && r.trial === 'idle' && near(o, 26)) return 'Antike Prüfung starten: ' + (r.trialMode === 'mini' ? 'Mini-Boss' : '3 Gegnerwellen');
     if (o.type === 'ware' && !o.sold && near(o, 20)) return `Kaufen: ${o.it.slot === 'art' ? o.it.name + ' ' + '★'.repeat(o.it.stars) : o.it.name} (${fmt(o.price)} Gold)`;
     if (o.type === 'npc' && near(o, 30)) return 'Händler: „Gold nützt dir tot nichts!“';
     if (o.type === 'lever' && near(o) && (o.reset || (!o.on && !r.solved))) return o.reset ? 'Blöcke zurücksetzen' : 'Hebel ziehen';
@@ -1732,7 +1776,8 @@ function openChest(o) {
   burst(x, y, [RARITY[rar].color, '#ffffff', '#ffd25a'], 14 + rar * 10, 60 + rar * 25, .9, 1, -30);
   dropGold(x, y + 6, Math.round(rint(6, 14) * (1 + rar) * goldMult() * (o.ultra ? 3 : 1)));
   // Artefakte: Boss-Truhe 1–2 aus dem Dungeon-Set, Ultra-Truhen „Goldene Gier“, sonst selten
-  if (o.boss) { dropArtifact(runSet(), x, y); if (Math.random() < .5) setTimeout(() => Run.active && dropArtifact(runSet(), x + 6, y), 700); }
+  if (o.ancient) { dropArtifact(runSet(), x, y); if (Math.random() < .25) setTimeout(() => Run.active && dropArtifact(runSet(), x + 6, y), 700); }
+  else if (o.boss) { dropArtifact(runSet(), x, y); if (Math.random() < .5) setTimeout(() => Run.active && dropArtifact(runSet(), x + 6, y), 700); }
   else if (o.ultra) { if (Math.random() < .55) setTimeout(() => Run.active && dropArtifact('goldgier', x, y, 1), 700); }
   else if (Math.random() < .06 + Run.lootx * .1) setTimeout(() => Run.active && dropArtifact(runSet(), x, y), 700);
   if (player().st.aset.goldgier === 4 && Math.random() < .3) setTimeout(() => Run.active && giveLoot(randomItem(rollRarity(1), lootLvl(), .2), x - 6, y), 1100);
@@ -1755,14 +1800,14 @@ function updateTraps(dt) {
   for (const o of r.objs) {
     if (o.type === 'spikes') {
       const st = spikeState(o, Run.time); if (o.last !== st && st === 2 && Math.abs(o.tx * T + 8 - p.x) < 40 && Math.abs(o.ty * T + 8 - p.y) < 30) sfx('spike'); o.last = st;
-      if (st === 2 && p.x > o.tx * T + 2 && p.x < o.tx * T + 14 && p.y + 3 > o.ty * T + 2 && p.y + 3 < o.ty * T + 14) hurtHero(p, 8 + (Run.level + Run.stage - 1) * 1.5, p.x, p.y + 4);
+      if (st === 2 && p.x > o.tx * T + 2 && p.x < o.tx * T + 14 && p.y + 3 > o.ty * T + 2 && p.y + 3 < o.ty * T + 14) hurtHero(p, 9 * scaleMult().dmg, p.x, p.y + 4);
     }
     if (o.type === 'jet') {
       o.t += dt; const ph = jetPhase(o); o.end = o.end || jetEnd(o);
       if (ph === 1 && Math.random() < .3) burst(o.tx * T + 8 + o.dir * 7, o.ty * T + 8, ['#ff9a3c', '#f4d03f'], 1, 20, .3);
       if (ph === 2) { if (Math.random() < .8) Run.parts.push({ x: rand(Math.min(o.tx * T + 8, o.end), Math.max(o.tx * T + 8, o.end)), y: o.ty * T + 8 + rand(-4, 4), vx: o.dir * 40, vy: rand(-20, -5), life: .35, max: .35, col: pick(['#ff7a2a', '#f4d03f', '#9e2a22']), size: 2 });
         const x0 = Math.min(o.tx * T + 8, o.end), x1 = Math.max(o.tx * T + 8, o.end);
-        if (p.y > o.ty * T + 1 && p.y < o.ty * T + 15 && p.x > x0 && p.x < x1) hurtHero(p, 10 + (Run.level + Run.stage - 1) * 1.5, p.x - o.dir * 10, p.y); }
+        if (p.y > o.ty * T + 1 && p.y < o.ty * T + 15 && p.x > x0 && p.x < x1) hurtHero(p, 11 * scaleMult().dmg, p.x - o.dir * 10, p.y); }
     }
   }
 }
@@ -1778,15 +1823,16 @@ function enterRoom(room, fromDir) {
   // Helden an die Eingangstür stellen
   const pos = { n: [VW / 2, 30], s: [VW / 2, VH - 24], w: [26, VH / 2 + 4], e: [VW - 26, VH / 2 + 4] }[fromDir] || [VW / 2, VH / 2 + 4];
   Run.heroes.forEach((h, i) => { h.x = pos[0] + (i ? rand(-10, 10) : 0); h.y = pos[1] + (i ? rand(-6, 6) : 0); h.kb.x = h.kb.y = 0; unstick(h); if (h.out) { h.out = false; h.downed = false; h.hp = h.st.maxHp * .3; } });
-  Run.locked = false; Run.lockExcept = null; Run.waveIdx = 0; Run.mimicLock = false;
-  const T2 = { start: 'Eingangshalle', combat: 'Kampfraum', puzzle: 'Rätselraum', trap: 'Fallenraum', loot: 'Schatzkammer', ultra: 'Ultra-Schatzkammer', boss: 'Thronsaal', shrine: 'Schrein', merchant: 'Händler' };
+  Run.locked = false; Run.lockExcept = null; Run.waveIdx = 0; Run.mimicLock = false; Run.mini = null; Run.miniDown = false;
+  if (room.type === 'ancient' && room.trial === 'active') room.trial = 'idle'; // Prüfung abgebrochen → kann neu gestartet werden
+  const T2 = { start: 'Eingangshalle', combat: 'Kampfraum', puzzle: 'Rätselraum', trap: 'Fallenraum', loot: 'Schatzkammer', ultra: 'Ultra-Schatzkammer', boss: 'Thronsaal', shrine: 'Schrein', merchant: 'Händler', ancient: 'Antiker Raum' };
   if (room.type === 'combat' && !room.cleared) { Run.locked = true; Run.waveTimer = .9; banner('Kampfraum', 'Besiege alle Gegner!', 1.6, '#ff8a6a'); sfx('door'); }
   else if (room.type === 'boss' && !room.cleared) { Run.locked = true; Run.waveTimer = 1.6; banner('', 'Etwas regt sich im Dunkeln…', 1.5, '#ff5a4a'); sfx('door'); }
   else if (room.type === 'puzzle' && !room.solved) { Run.locked = true; Run.lockExcept = fromDir;
     const hint = { levers: 'Ziehe die Hebel in der Reihenfolge der Steintafel', plates: 'Schiebe die Kisten auf die Druckplatten', torches: 'Entzünde alle Feuerschalen gleichzeitig (Feuerball hilft!)', runes: 'Drehe die Runen passend zur Steintafel' }[room.puzzle];
     banner('Rätselraum', hint, 3.5, '#6fd6ff'); }
   else if (room.type === 'trap') banner('Fallenraum', 'Achte auf Stacheln und Feuer!', 2, '#ff9a3c');
-  else banner(T2[room.type], room.type === 'start' ? 'Finde den Thronsaal' : room.type === 'shrine' ? (room.objs[0] && !room.objs[0].used ? 'Berühre den Schrein für einen Segen – oder einen Pakt' : '') : room.type === 'merchant' ? 'Gib dein Gold aus, bevor du es verlierst!' : '', 1.8, '#e8e2d0');
+  else banner(T2[room.type], room.type === 'start' ? 'Finde den Thronsaal' : room.type === 'shrine' ? (room.objs[0] && !room.objs[0].used ? 'Berühre den Schrein für einen Segen – oder einen Pakt' : '') : room.type === 'merchant' ? 'Gib dein Gold aus, bevor du es verlierst!' : room.type === 'ancient' ? (room.trial === 'idle' ? 'Optional: Berühre das Relikt – ' + (room.trialMode === 'mini' ? 'Mini-Boss' : 'Gegnerwellen') + ' für ein Artefakt' : '') : '', 1.8, '#e8e2d0');
 }
 function checkDoors() {
   const p = player(); if (p.downed || Run.fade > 0) return;
@@ -1894,14 +1940,18 @@ function updateRun(dt) {
   updateTraps(dt); updateProjs(dt); updateFx(dt);
   // Wellen & Boss
   const r = Run.room;
-  if ((r.type === 'combat' || r.type === 'boss') && !r.cleared) {
+  const trialW = r.type === 'ancient' && r.trial === 'active' && r.trialMode === 'waves';
+  if ((r.type === 'combat' || r.type === 'boss' || trialW) && !r.cleared) {
     if (Run.waveTimer > 0) { Run.waveTimer -= dt; if (Run.waveTimer <= 0) { if (r.type === 'boss') spawnBoss(); else startWave(); } }
-    else if (r.type === 'combat' && !Run.enemies.length && !Run.pendingSpawns) {
+    else if ((r.type === 'combat' || trialW) && !Run.enemies.length && !Run.pendingSpawns) {
       Run.waveIdx++;
       if (Run.waveIdx < r.waves.length) Run.waveTimer = 1.1;
+      else if (trialW) completeTrial(r);
       else { r.cleared = true; Run.locked = false; sfx('unlock'); banner('Raum gesäubert!', 'Die Türen öffnen sich', 1.8, '#8fe05a'); Run.xp += 10; }
     }
   }
+  if (r.type === 'ancient' && r.trial === 'active' && r.miniT > 0) { r.miniT -= dt; if (r.miniT <= 0) spawnMiniBoss(r); }
+  if (r.type === 'ancient' && r.trial === 'active' && r.trialMode === 'mini' && Run.miniDown && !Run.enemies.length && !Run.pendingSpawns) { Run.miniDown = false; completeTrial(r); }
   checkDoors();
 }
 
@@ -2067,6 +2117,36 @@ function buyWare(o) {
 function dropArtifact(set, x, y, bonus = 0) { const s = clamp(rollStars(Run.diff || 0) + bonus + (Run.stage >= 4 && Math.random() < .3 ? 1 : 0), 2, 5); giveLoot(makeArtifact(set, s), x, y); }
 const runSet = () => DUNGEON_BY[Run.dungeonId || 'krypta'].set;
 
+/* ---------- Antike Räume: optionale Prüfung → Artefakt ---------- */
+function startTrial(r) {
+  if (r.trial !== 'idle') return; r.trial = 'active'; Run.locked = true; sfx('roar'); shake(6);
+  Run.fx.push({ type: 'ring', x: VW / 2, y: VH / 2, r: 4, max: 140, speed: 160, dmg: 0, team: 'none', col: '#b48cff', hit: new Set() });
+  if (r.trialMode === 'waves') { // 3 harte Wellen, jede mit Elite-Gegnern
+    const TP = THEME_POOL[r.themeIdx || 0]; r.waves = [0, 1, 2].map(w => Array.from({ length: 4 + w + (Run.party - 1) * 2 }, () => pick(TP.hard)));
+    r.trialElites = true; Run.waveIdx = 0; Run.waveTimer = 1.2; banner('Antike Prüfung', '3 Wellen mit Elite-Gegnern – halte durch!', 2.4, '#c8a8ff');
+  } else { Run.waveTimer = 0; r.miniT = .9; banner('Antike Prüfung', 'Ein uralter Wächter erwacht…', 2.4, '#c8a8ff'); }
+}
+function spawnMiniBoss(r) {
+  const M = MINIBOSSES[r.themeIdx || 0], p = { x: VW / 2, y: VH / 2 - 16 };
+  const e = spawnEnemy(M.base, p.x, p.y), P = Run.party - 1;
+  e.mini = M; e.hp = e.maxHp = e.maxHp * 9 * (1 + .3 * P); e.dmg *= 1.5; e.scale = 1.9; e.r = Math.round(e.r * 1.7); e.speed *= .9; e.mt = 3; e.mStep = 0; e.spawnT = .6;
+  Run.mini = e; burst(p.x, p.y, ['#b48cff', '#ffffff', M.col], 40, 120, .8); sfx('roar'); shake(8);
+}
+// Zusatzangriffe des Mini-Bosses (läuft zusätzlich zur normalen KI des Grundtyps)
+function updateMiniBoss(e, dt) {
+  if (e.ringT > 0) { e.ringT -= dt; if (e.ringT <= 0) { Run.fx.push({ type: 'ring', x: e.x, y: e.y, r: 6, max: 90, speed: 130, dmg: e.dmg * .8, team: 'enemy', col: e.mini.col, hit: new Set(), thick: 3 }); sfx('heavy'); shake(4); } }
+  e.mt -= dt; if (e.mt > 0) return; const M = e.mini; e.mStep++;
+  if (e.mStep % 3 === 1) { Run.fx.push({ type: 'warn', x: e.x, y: e.y, r: 36, t: 0, dur: .9 }); e.ringT = .9; e.mt = 4; }
+  else if (e.mStep % 3 === 2) { const [h] = nearestHero(e); if (h) { const a = Math.atan2(h.y - e.y, h.x - e.x); for (let i = -2; i <= 2; i++) { const aa = a + i * .2; Run.projs.push({ x: e.x, y: e.y - 6, vx: Math.cos(aa) * 120, vy: Math.sin(aa) * 120, r: 3, dmg: e.dmg * .55, team: 'enemy', kind: e.mini.base === 'archer' ? 'ice' : 'bolt', life: 2.5, col: M.col, slow: e.mini.base === 'archer' ? 1.2 : 0, hit: new Set() }); } sfx('shoot'); } e.mt = 3.5; }
+  else { if (Run.enemies.length < 7) M.adds.forEach(t => spawnWithWarning(t, freeSpot(50), .8)); banner('', 'Der Wächter ruft Hilfe…', 1.2, '#c8a8ff'); e.mt = 4.5; }
+}
+function completeTrial(r) {
+  r.trial = 'done'; r.cleared = true; Run.locked = false; Run.mini = null; r.trialElites = false;
+  sfx('victory'); shake(6); banner('Prüfung bestanden!', 'Eine antike Truhe erscheint', 2.6, '#c8a8ff'); Run.xp += 60;
+  r.objs.push({ type: 'chest', tx: 10, ty: 7, solid: true, open: false, rarity: Math.max(2, rollRarity(1.5)), ancient: true });
+  burst(VW / 2, 7 * T + 8, ['#b48cff', '#ffd25a', '#ffffff'], 40, 100, .9, 1, -40);
+}
+
 /* =====================================================================
    MODUL 10: DARSTELLUNG – Welt, Licht & Schatten, HUD, Minimap
    ===================================================================== */
@@ -2195,7 +2275,7 @@ function renderLight() {
   for (const o of Run.room.objs) { if (o.type === 'brazier' && o.lit > 0) light(o.tx * T + 8, o.ty * T + 4, 54 * fl(o.tx), 1); if (o.type === 'portal') light(o.tx * T + 8, o.ty * T + 8, 60, .9); if (o.type === 'scroll' && !o.taken) light(o.tx * T + 8, o.ty * T + 4, 34, .8); if (o.type === 'chest' && !o.open) light(o.tx * T + 8, o.ty * T + 8, 16, .4);
     if (o.type === 'jet' && jetPhase(o) === 2) { const x0 = o.tx * T + 8, x1 = o.end || x0; for (let x = Math.min(x0, x1); x < Math.max(x0, x1); x += 20) light(x, o.ty * T + 8, 26, .8); } }
   for (const p of Run.projs) light(p.x, p.y, p.kind === 'fireball' ? 44 : p.kind === 'flame' ? 18 : p.kind === 'arrow' || p.kind === 'rock' || p.kind === 'web' ? 10 : 26, .8);
-  for (const o of Run.room.objs) { if (o.type === 'shrine' && !o.used) light(o.tx * T + 8, o.ty * T, 40, .7); if (o.type === 'candle') light(o.tx * T + 8, o.ty * T + 6, 22, .6); if (o.type === 'npc' || o.type === 'ware') light(o.tx * T + 8, o.ty * T + 4, 30, .6); }
+  for (const o of Run.room.objs) { if (o.type === 'shrine' && !o.used) light(o.tx * T + 8, o.ty * T, 40, .7); if (o.type === 'relic') light(o.tx * T + 8, o.ty * T, 46, .8); if (o.type === 'candle') light(o.tx * T + 8, o.ty * T + 6, 22, .6); if (o.type === 'npc' || o.type === 'ware') light(o.tx * T + 8, o.ty * T + 4, 30, .6); }
   for (const e of Run.enemies) if (e.D.ai === 'wisp') light(e.x, e.y - 6, 26, .7);
   for (const f of Run.fx) { if (f.type === 'chestlight') light(f.x, f.y - 20, 50 + f.rar * 16, Math.sin(Math.min(1, f.t / f.dur * 2) * Math.PI)); if (f.type === 'boom' || f.type === 'pillar') light(f.x, f.y, 60, .9); if (f.type === 'lavapool') light(f.x, f.y, f.r * 2, .7); if (f.type === 'warn' && f.meteor) light(f.x, f.y, f.r * 1.4, .5); if (f.type === 'bolt') f.pts.forEach(q => light(q.x, q.y, 30, .8)); }
   if (Run.boss) light(Run.boss.x, Run.boss.y - 10, 50, .6);
@@ -2268,6 +2348,7 @@ function drawHUD() {
   ctx.fillStyle = '#f4d03f'; ctx.fillRect(20, 66, 8, 8); txt(fmt(Run.gold), 34, 66, 9, '#ffd25a');
   Run.heroes.slice(1).forEach((h, i) => { const y = 84 + i * 22; txt(h.name, 20, y, 7, h.downed ? '#ff8a7a' : h.out ? '#666' : '#b8d8ff'); bar(120, y, 140, 6, h.out ? 0 : h.hp / h.st.maxHp, h.downed ? '#7a2a22' : '#e2483d'); });
   // Boss-Leiste
+  if (Run.mini && !Run.mini.dead) { const b = Run.mini, w = 320; txt(b.mini.name, canvas.width / 2, 14, 10, '#c8a8ff', 'center'); bar(canvas.width / 2 - w / 2, 32, w, 10, b.hp / b.maxHp, '#9a5aff'); }
   if (Run.boss) { const b = Run.boss, w = 420; txt(b.D.name, canvas.width / 2, 14, 10, '#ff8a7a', 'center'); bar(canvas.width / 2 - w / 2, 32, w, 12, b.hp / b.maxHp, b.phase === 3 ? '#ff2a1a' : '#c0392b');
     for (const t of [.66, .33]) { ctx.fillStyle = '#000'; ctx.fillRect(canvas.width / 2 - w / 2 + w * t - 1, 32, 3, 12); } }
   drawMinimap();
@@ -2318,7 +2399,7 @@ function drawMinimap() {
   const big = Math.max(maxx - minx, maxy - miny) > 5, cw = big ? 12 : 16, ch = big ? 9 : 12, gap = big ? 4 : 6;
   const W = (maxx - minx + 1) * (cw + gap), H2 = (maxy - miny + 1) * (ch + gap), x0 = canvas.width - W - 18, y0 = 14;
   ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x0 - 8, y0 - 8, W + 10, H2 + 10);
-  const col = { start: '#5fd068', combat: '#c0392b', puzzle: '#3d8bff', trap: '#e67e22', loot: '#f4d03f', boss: '#ff2a6a', ultra: '#ffd25a' };
+  const col = { start: '#5fd068', combat: '#c0392b', puzzle: '#3d8bff', trap: '#e67e22', loot: '#f4d03f', boss: '#ff2a6a', ultra: '#ffd25a', shrine: '#fff2a0', merchant: '#a8823a', ancient: '#b48cff' };
   txt('Stage ' + Run.stage, x0 + W / 2 - gap / 2, y0 + H2 + 6, 8, '#ffd25a', 'center');
   for (const r of rooms) { if (!r.known) continue; const x = x0 + (r.gx - minx) * (cw + gap), y = y0 + (r.gy - miny) * (ch + gap);
     ctx.fillStyle = '#5a4866'; if (r.doors.e && r.doors.e.known) ctx.fillRect(x + cw, y + ch / 2 - 1, gap, 3); if (r.doors.s && r.doors.s.known) ctx.fillRect(x + cw / 2 - 1, y + ch, 3, gap); }
@@ -2326,6 +2407,7 @@ function drawMinimap() {
     if (!r.known) continue; const x = x0 + (r.gx - minx) * (cw + gap), y = y0 + (r.gy - miny) * (ch + gap);
     ctx.fillStyle = r.visited ? col[r.type] : '#2a2232'; ctx.fillRect(x, y, cw, ch);
     if (r.visited && !r.cleared && r.type !== 'loot' && r.type !== 'trap') { ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fillRect(x + 3, y + 3, cw - 6, ch - 6); }
+    if (r.type === 'ancient' && r.known && r.trial !== 'done') { ctx.fillStyle = '#fff'; ctx.fillRect(x + cw / 2 - 1, y + 2, 2, ch - 4); ctx.fillRect(x + cw / 2 - 3, y + ch / 2 - 1, 6, 2); }
     if (r.type === 'boss' && r.known) { ctx.fillStyle = '#fff'; ctx.fillRect(x + 6, y + 3, 4, 3); ctx.fillRect(x + 7, y + 6, 2, 2); }
     if (r === Run.room) { ctx.strokeStyle = Math.floor(Run.time * 3) % 2 ? '#ffffff' : '#ffd25a'; ctx.lineWidth = 2; ctx.strokeRect(x - 2, y - 2, cw + 4, ch + 4); ctx.lineWidth = 1; }
   }
@@ -2394,7 +2476,7 @@ function artTipHTML(a, cmp) {
 function tooltipHTML(it, cmpItem) {
   if (it.slot === 'art') return artTipHTML(it, cmpItem);
   const R = RARITY[it.rarity];
-  let h = `<div class="nm" style="color:${it.set ? SET_COLOR : R.color}">${esc(itemName(it))}</div><div class="muted">${R.name}${it.set ? ' · Set' : ''} · ${it.slot === 'weapon' ? WEAPONS[it.type].name : it.slot === 'spell' ? 'Zauberspruch' : it.slot === 'jewel' ? 'Schmuck' : ARMOR_CLASS[it.cls].name + ' · ' + SLOT_NAMES[it.slot]}</div><div style="margin-top:6px">`;
+  let h = `<div class="nm" style="color:${it.set ? SET_COLOR : R.color}">${esc(itemName(it))}</div><div class="muted">${R.name}${it.set ? ' · Set' : ''}${it.slot !== 'spell' ? ' · <span style="color:#9ad0ff">Stufe ' + Math.min(20, it.ilvl || 1) + '</span>' : ''} · ${it.slot === 'weapon' ? WEAPONS[it.type].name : it.slot === 'spell' ? 'Zauberspruch' : it.slot === 'jewel' ? 'Schmuck' : ARMOR_CLASS[it.cls].name + ' · ' + SLOT_NAMES[it.slot]}</div><div style="margin-top:6px">`;
   if (it.slot === 'spell') {
     const S = SPELLS[it.spell], st = spellStats(it);
     h += `<div>${esc(S.desc)}</div>${st.dmg ? `<div>Schaden: ${Math.round(st.dmg)}</div>` : ''}${S.heal ? `<div>Heilung: ${Math.round(S.heal * (1 + .2 * it.rarity) * 100)} % LP</div>` : ''}<div>Abklingzeit: ${st.cd.toFixed(1)} s</div><div>Mana: ${st.mana}</div>`;
@@ -2447,7 +2529,7 @@ let drag = null;
 function slotEl(loc, label, opts = {}) {
   const it = getAt(loc), el = document.createElement('div');
   el.className = 'slot ' + (it ? 'r' + it.rarity : 'empty'); el.dataset.loc = loc; el.dataset.label = label || '';
-  if (it) { el.appendChild(iconCanvas(it)); if (it.up) { const s = document.createElement('span'); s.className = 'lvl'; s.textContent = '+' + it.up; el.appendChild(s); } }
+  if (it) { el.appendChild(iconCanvas(it)); if (it.slot !== 'spell' && it.slot !== 'art' && it.ilvl) { const t = document.createElement('span'); t.className = 'lvl'; t.style.cssText = 'left:2px;right:auto;top:2px;bottom:auto;color:#9ad0ff'; t.textContent = Math.min(20, it.ilvl); el.appendChild(t); } if (it.slot === 'art' && it.lvl) { const t = document.createElement('span'); t.className = 'lvl'; t.textContent = '+' + it.lvl; el.appendChild(t); } if (it.up) { const s = document.createElement('span'); s.className = 'lvl'; s.textContent = '+' + it.up; el.appendChild(s); } }
   el.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse' && !drag && !tipEl.classList.contains('pinned') && getAt(loc)) { const it2 = getAt(loc); showTip(it2, e.clientX, e.clientY, compareFor(it2, loc)); } });
   el.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && !drag && tipEl.style.display === 'block' && !tipEl.classList.contains('pinned')) placeTip(e.clientX, e.clientY); });
   el.addEventListener('pointerleave', () => { if (!tipEl.classList.contains('pinned')) hideTip(); });
@@ -2489,7 +2571,7 @@ addEventListener('pointerdown', e => { if (tipEl.classList.contains('pinned') &&
 const UI = {
   cur: null, sell: null,
   hide() { uiRoot.innerHTML = ''; hideTip(); this.cur = null; },
-  show(name, ...a) { this.cur = [name, a]; hideTip(); this.sell = null; uiRoot.innerHTML = ''; this[name](...a); this.fit(); },
+  show(name, ...a) { this.cur = [name, a]; hideTip(); this.sell = null; uiRoot.innerHTML = ''; this[name](...a); this.fit(); if (typeof Touch !== 'undefined' && !Run.active) Touch.update(); },
   // Inhalt eines Menüs so skalieren, dass er ohne Scrollen ganz sichtbar ist
   fit() {
     for (const scr of uiRoot.querySelectorAll('.screen')) {
@@ -2603,10 +2685,10 @@ const UI = {
   },
   shop() {
     const d = Profile.data;
-    if (!d.shop || !d.shop.items || d.shop.level !== d.level) this.restock();
+    if (!d.shop || !d.shop.items || d.shop.tier !== shopTier()) this.restock();
     uiRoot.innerHTML = `<div class="screen">${this.topbar('Händler Grimbold')}
       <div class="row" style="align-items:flex-start;justify-content:center;width:min(1100px,100%)">
-        <div class="panel col"><h3>Angebot</h3><div class="s muted">„Frische Ware aus den Tiefen. Nur Bares!“</div><div class="row" id="stock" style="max-width:420px"></div>
+        <div class="panel col"><h3>Angebot</h3><div class="s muted">„Frische Ware aus den Tiefen. Nur Bares!“ – Ausrüstungsstufe ${shopTier()} (steigt mit deiner höchsten freigeschalteten Schwierigkeit)</div><div class="row" id="stock" style="max-width:420px"></div>
           <button class="btn small" id="bRe">Neue Ware (25 Gold)</button>
           <div class="row" style="margin-top:8px"><canvas id="potIc" width="16" height="16" style="width:40px;height:40px;image-rendering:pixelated"></canvas><div class="s">Heiltrank – heilt 40 % Leben (Taste R / 🧪)<br>Du hast ${d.potions}/${POTION_MAX}</div><button class="btn small gold" id="bPot" ${d.potions >= POTION_MAX ? 'disabled' : ''}>Kaufen (${POTION_PRICE})</button></div></div>
         <div class="panel col" data-sellzone="1"><h3>Dein Inventar – zum Verkaufen antippen oder hierher ziehen</h3><div class="invgrid" id="inv"></div></div>
@@ -2626,31 +2708,41 @@ const UI = {
     document.getElementById('bBack').onclick = () => { sfx('click'); this.show('lobby'); };
   },
   // Dungeon-Auswahl: 4 Dungeons mit je 5 Stufen; Stufe N+1 nach Sieg auf Stufe N
-  dungeons() {
-    const d = Profile.data;
+  dungeons(selId) {
+    const d = Profile.data, cur = DUNGEON_BY[selId || this.dsel || 'krypta'] || DUNGEONS[0]; this.dsel = cur.id;
+    const open = D => d.level >= D.unlock, cl = d.dclear[cur.id] || 0, S = ART_SETS[cur.set], B = BOSSES[cur.boss];
+    const want = Math.min(this.diffSel != null && this.dselFor === cur.id ? this.diffSel : cl, 4), diff = Math.min(want, cl);
+    const tag = (txt, col) => `<span style="display:inline-block;padding:3px 6px;border:2px solid ${col};color:${col};font-size:8px;margin:2px 2px 0 0">${txt}</span>`;
     uiRoot.innerHTML = `<div class="screen">${this.topbar('Dungeon wählen')}
-      <div class="s muted" style="max-width:900px;text-align:center;margin-bottom:10px">Jeder Dungeon hat einen eigenen Boss und ein eigenes Artefakt-Set. Höhere Stufen: stärkere Gegner, bessere Beute und Artefakte mit mehr Sternen. Besiege den Boss, um die nächste Stufe freizuschalten.</div>
-      <div class="row" id="dl" style="justify-content:center;align-items:stretch;width:min(1180px,100%)"></div>
-      <div class="row" style="margin-top:12px"><button class="btn" id="bBack">← Zurück</button></div></div>`;
-    const L = document.getElementById('dl');
-    for (const D of DUNGEONS) {
-      const open = d.level >= D.unlock, cl = d.dclear[D.id] || 0, S = ART_SETS[D.set], B = BOSSES[D.boss], el = document.createElement('div');
-      el.className = 'panel col'; el.style.cssText = `width:280px;gap:8px;border-color:${S.col}55${open ? '' : ';filter:grayscale(.85) brightness(.7)'}`;
-      const c = document.createElement('canvas'); c.width = 16; c.height = 16; c.style.cssText = `width:64px;height:64px;image-rendering:pixelated;background:radial-gradient(${THEMES[D.theme].wall},#0b0910);align-self:center`; c.getContext('2d').drawImage(sprite(B.spr), 0, 0);
-      el.innerHTML = `<div style="font-size:11px;color:${S.col}">${esc(D.name)}</div>`; el.appendChild(c);
-      const info = document.createElement('div'); info.className = 's';
-      info.innerHTML = `<div class="muted">${esc(D.desc)}</div><div style="margin-top:4px">Boss: <span style="color:#ff8a7a">${esc(B.name)}</span></div>
-        <div style="margin-top:4px;color:${S.col}">Artefakte: ${esc(S.name)}</div><div class="muted">2: ${esc(S.b2)}<br>4: ${esc(S.b4)}</div>
-        ${open ? '' : `<div style="color:#ff8a7a;margin-top:4px">🔒 Ab Konto-Level ${D.unlock}</div>`}`;
-      el.appendChild(info);
-      const row = document.createElement('div'); row.className = 'row'; row.style.gap = '6px';
-      DIFFS.forEach((F, i) => { const b = document.createElement('button'), ok = open && i <= cl; b.style.cssText = 'min-width:40px;padding:8px 6px'; b.className = 'btn small' + (ok ? (i === cl ? ' gold' : '') : ''); b.textContent = F.n; b.disabled = !ok;
-        b.title = 'Stufe ' + F.n + ': Gegner ×' + F.mult + ' · Artefakte ' + Object.keys(F.stars).map(s => s + '★').join('/');
-        b.onclick = () => { sfx('click'); this.sel = { dungeon: D.id, diff: i }; this.show('party', true); }; row.appendChild(b); });
-      el.appendChild(row);
-      const st = document.createElement('div'); st.className = 's muted'; st.textContent = open ? (cl >= 5 ? 'Alle Stufen gemeistert!' : 'Freigeschaltet bis Stufe ' + DIFFS[cl].n + ' · Sterne: ' + Object.keys(DIFFS[cl].stars).join('–') + '★') : ''; el.appendChild(st);
-      L.appendChild(el);
-    }
+      <div class="row" style="align-items:stretch;justify-content:center;width:min(1100px,100%);flex-wrap:nowrap">
+        <div class="col" id="dlist" style="width:230px;flex:none"></div>
+        <div class="panel col" style="flex:1;min-width:0;gap:10px;border-color:${S.col}88">
+          <div class="row" style="flex-wrap:nowrap;gap:14px;align-items:center">
+            <canvas id="bossPrev" width="16" height="16" style="width:84px;height:84px;image-rendering:pixelated;background:radial-gradient(${THEMES[cur.theme].wall},#0b0910);flex:none"></canvas>
+            <div class="col" style="gap:6px"><div style="font-size:13px;color:${S.col}">${esc(cur.name)}</div><div class="s muted">${esc(cur.desc)}</div>
+              <div class="s">Boss: <span style="color:#ff8a7a">${esc(B.name)}</span> · Artefakt-Set: <span style="color:${S.col}">${esc(S.name)}</span></div>
+              <div class="s muted">2 Teile: ${esc(S.b2)} · 4 Teile: ${esc(S.b4)}</div></div>
+          </div>
+          <div class="s" style="color:#ffd25a">Schwierigkeit wählen</div>
+          <div class="col" id="dtable" style="gap:6px"></div>
+          <div class="s muted">Jede Stage: ein antiker Raum (optionale Prüfung → Artefakt) · alle 5 Stages eine Ultra-Schatzkammer · Ausrüstungsstufe steigt alle 2 Stages</div>
+          <button class="btn big gold" id="bGoRun">⚔ ${esc(cur.name)} · Stufe ${DIFFS[diff].n} – weiter</button>
+        </div>
+      </div><div class="row" style="margin-top:10px"><button class="btn" id="bBack">← Zurück</button></div></div>`;
+    document.getElementById('bossPrev').getContext('2d').drawImage(sprite(B.spr), 0, 0);
+    const L = document.getElementById('dlist');
+    for (const D of DUNGEONS) { const b = document.createElement('button'), ok = open(D), c = d.dclear[D.id] || 0, SC = ART_SETS[D.set].col;
+      b.className = 'btn' + (D.id === cur.id ? ' gold' : ''); b.style.cssText = `text-align:left;display:flex;align-items:center;gap:8px;padding:8px;${ok ? '' : 'filter:grayscale(1) brightness(.6)'}`;
+      const cv = document.createElement('canvas'); cv.width = 16; cv.height = 16; cv.style.cssText = 'width:32px;height:32px;image-rendering:pixelated;flex:none'; cv.getContext('2d').drawImage(sprite(BOSSES[D.boss].spr), 0, 0);
+      b.appendChild(cv); b.insertAdjacentHTML('beforeend', `<span style="font-size:9px;line-height:1.6"><span style="color:${D.id === cur.id ? '#fff' : SC}">${esc(D.name)}</span><br><span class="muted" style="font-size:8px">${ok ? (c ? 'bis Stufe ' + DIFFS[Math.min(c, 4)].n : 'Stufe I') : '🔒 ab Konto-Level ' + D.unlock}</span></span>`);
+      b.onclick = () => { sfx('click'); this.diffSel = null; this.show('dungeons', D.id); }; L.appendChild(b); }
+    const T2 = document.getElementById('dtable');
+    DIFFS.forEach((F, i) => { const ok = open(cur) && i <= cl, sel = i === diff, done = i < cl, row = document.createElement('button');
+      row.className = 'btn small' + (sel ? ' gold' : ''); row.disabled = !ok; row.style.cssText = 'display:flex;align-items:center;gap:10px;text-align:left;width:100%;padding:6px 10px';
+      row.innerHTML = `<span style="font-size:12px;width:34px;flex:none">${F.n}</span><span style="flex:1;line-height:1.5">${tag('Ausrüstung ' + tierRange(i), '#9ad0ff')}${tag('Artefakte ' + Object.keys(F.stars).join('/') + '★', STAR_COL[Math.max(...Object.keys(F.stars).map(Number))])}${tag('Gegner ' + ['leicht', 'mittel', 'schwer', 'sehr schwer', 'extrem'][i], ['#5fd068', '#f4d03f', '#ff9a3c', '#ff4a3a', '#d040ff'][i])}</span><span style="flex:none;font-size:9px">${done ? '✓' : ok ? '' : '🔒'}</span>`;
+      row.onclick = () => { sfx('click'); this.diffSel = i; this.dselFor = cur.id; this.show('dungeons', cur.id); }; T2.appendChild(row); });
+    const go = document.getElementById('bGoRun'); go.disabled = !open(cur);
+    go.onclick = () => { sfx('click'); this.sel = { dungeon: cur.id, diff }; this.show('party', true); };
     document.getElementById('bBack').onclick = () => { sfx('click'); this.show('lobby'); };
   },
   daily() {
@@ -2716,7 +2808,7 @@ const UI = {
     }
     document.getElementById('bBack').onclick = () => { sfx('click'); this.show('lobby'); };
   },
-  restock() { const d = Profile.data; d.shop = { level: d.level, items: Array.from({ length: 6 }, () => Math.random() < .06 ? makeSpell(rollRarity(.3)) : randomItem(rollRarity(.4), d.level, .1)) }; Profile.save(); },
+  restock() { const d = Profile.data, t = shopTier(); d.shop = { tier: t, items: Array.from({ length: 6 }, () => Math.random() < .06 ? makeSpell(rollRarity(.3)) : randomItem(rollRarity(.4), t, .1)) }; Profile.save(); },
   buy(i, price) { const d = Profile.data, it = d.shop.items[i]; if (!it) return; if (d.gold < price) { sfx('wrong'); return toast('Nicht genug Gold.'); } if (!d.inv.includes(null)) { sfx('wrong'); return toast('Inventar ist voll.'); }
     d.gold -= price; Profile.give(it); d.shop.items[i] = null; sfx('coin'); toast(itemName(it) + ' gekauft!'); Profile.save(); this.refresh(); },
   // Schmiedin: Verbessern (Gold), Zerlegen (→ Essenz), Verzaubern (Passiv neu würfeln), Artefakte aufwerten

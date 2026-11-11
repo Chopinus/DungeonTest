@@ -16,6 +16,8 @@ Alles steckt in **einer Datei**: `index.html` im Browser öffnen und losspielen 
 | Pause | ESC | II oben rechts |
 
 ## Inhalte
+- **Ausrüstungsstufen 1–20** (zusätzlich zur Seltenheit): Schwierigkeit I gibt Stufe 1–4 (alle 2 Stages eine Stufe höher), II = 5–8, III = 9–12, IV = 13–16, V = 17–20. Gegnerstärke hängt an Schwierigkeit + Stage (Stage 10 auf I ist leichter als Stage 1 auf II). Pro zusätzlichem Spieler: Gegner +55 % Leben, +10 % Schaden (Bosse +70 % Leben).
+- **Antike Räume**: einer pro Stage (meist am Ende eines Nebenwegs). Optional: Relikt berühren → 3 Elite-Wellen oder ein Mini-Boss (Grabritter, Brutmutter, Magmakoloss, Eisjägerin) → antike Truhe mit garantiertem Artefakt.
 - **Dungeon-Auswahl**: 4 Dungeons (Krypta, Moosige Kerker, Glutschlund, Frostgewölbe) mit je 5 Stufen (I–V). Jeder Dungeon hat eigene Gegner, einen eigenen Boss (Knochenkönig, Moosgolem, Glutwyrm, Frostkönigin) und ein eigenes Artefakt-Set. Sieg über den Boss schaltet die nächste Stufe frei.
 - **Artefakte** (wie in Genshin): 5 Plätze (Blüte, Feder, Sanduhr, Kelch, Krone), 2★–5★ je nach Stufe, Hauptwert + bis zu 4 Nebenwerte, Set-Boni für 2 und 4 Teile, aufwerten mit Essenz (2★ bis +8 … 5★ bis +20). 6 Sets: Knochenkrone, Wildwuchs, Glutherz, Frostschwur, Goldene Gier (Ultra-Schatzkammer), Sturmläufer (Tagesbelohnung)
 - **Helden-Fähigkeiten**: Schildstoß, Pfeilhagel, Schattenschleier, Meteor, Raserei
