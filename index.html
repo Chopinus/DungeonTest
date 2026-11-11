@@ -481,10 +481,10 @@ const randomSetItem = (rarity, ilvl) => makeSetItem(pick(Object.keys(SETS)), pic
 const HERO_MAX = 20;
 const HEROES = {
   ritter: { name: 'Ritter', icon: '🛡', unlock: 1, weapons: 'all', hair: '#5a3a20', desc: 'Allrounder: kleiner Bonus mit jeder Waffe.', bonus: l => ({ dmgp: 6 + l, def: Math.round((1 + l * .5) * 10) / 10 }) },
-  bogen: { name: 'Bogenschütze', icon: '🏹', unlock: 4, weapons: ['bow'], hair: '#2f7a2a', desc: 'Großer Schadensbonus – aber nur mit Bögen.', bonus: l => ({ dmgp: 30 + l * 3, atkSpd: 8 + l, pierce: l >= 10 ? 1 : 0 }) },
-  assassine: { name: 'Assassine', icon: '🗡', unlock: 7, weapons: ['dagger'], hair: '#2a1a3a', desc: 'Tödliche kritische Treffer mit Dolchen.', bonus: l => ({ crit: +(.1 + l * .006).toFixed(3), critDmg: +(.4 + l * .03).toFixed(2), speed: .06 }) },
-  magier: { name: 'Magier', icon: '🔮', unlock: 10, weapons: ['staff'], hair: '#2a4aa8', desc: 'Stärkere Geschosse und Zauber mit Stäben.', bonus: l => ({ dmgp: 20 + l * 2, spellp: 30 + l * 3, manaRegen: 3, cdr: 10 }) },
-  berserker: { name: 'Berserker', icon: '🪓', unlock: 13, weapons: ['axe', 'hammer'], hair: '#b8401a', desc: 'Wucht und Lebensraub mit Äxten und Hämmern.', bonus: l => ({ dmgp: 25 + Math.round(l * 2.5), hpp: 10, lifesteal: +(.02 + l * .001).toFixed(3) }) },
+  bogen: { name: 'Bogenschütze', icon: '🏹', unlock: 8, weapons: ['bow'], hair: '#2f7a2a', desc: 'Großer Schadensbonus – aber nur mit Bögen.', bonus: l => ({ dmgp: 30 + l * 3, atkSpd: 8 + l, pierce: l >= 10 ? 1 : 0 }) },
+  assassine: { name: 'Assassine', icon: '🗡', unlock: 10, weapons: ['dagger'], hair: '#2a1a3a', desc: 'Tödliche kritische Treffer mit Dolchen.', bonus: l => ({ crit: +(.1 + l * .006).toFixed(3), critDmg: +(.4 + l * .03).toFixed(2), speed: .06 }) },
+  magier: { name: 'Magier', icon: '🔮', unlock: 12, weapons: ['staff'], hair: '#2a4aa8', desc: 'Stärkere Geschosse und Zauber mit Stäben.', bonus: l => ({ dmgp: 20 + l * 2, spellp: 30 + l * 3, manaRegen: 3, cdr: 10 }) },
+  berserker: { name: 'Berserker', icon: '🪓', unlock: 14, weapons: ['axe', 'hammer'], hair: '#b8401a', desc: 'Wucht und Lebensraub mit Äxten und Hämmern.', bonus: l => ({ dmgp: 25 + Math.round(l * 2.5), hpp: 10, lifesteal: +(.02 + l * .001).toFixed(3) }) },
 };
 const heroXpNeed = l => Math.round(30 * Math.pow(l, 1.4));
 const heroFits = (hid, wtype) => { const H = HEROES[hid]; return H.weapons === 'all' || H.weapons.includes(wtype); };
@@ -512,7 +512,7 @@ const Profile = {
     const d = this.data; d.inv = d.inv || []; while (d.inv.length < INV_SIZE) d.inv.push(null); d.inv.length = INV_SIZE;
     d.hotbar = d.hotbar || [null, null, null, null];
     d.arts = d.arts || []; d.artEq = d.artEq || {}; d.essence = d.essence || 0; d.dclear = d.dclear || {}; if (d.potions == null) d.potions = 3;
-    d.heroes = d.heroes || {}; for (const k of Object.keys(HEROES)) d.heroes[k] = d.heroes[k] || { lvl: 1, xp: 0 }; if (!HEROES[d.hero]) d.hero = 'ritter';
+    d.heroes = d.heroes || {}; for (const k of Object.keys(HEROES)) d.heroes[k] = d.heroes[k] || { lvl: 1, xp: 0 }; if (!HEROES[d.hero] || d.level < HEROES[d.hero].unlock) d.hero = 'ritter';
     Sound.setVol(d.settings.vol);
   },
   save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); } catch (e) {} },
@@ -622,6 +622,28 @@ const Social = new MockSocialService();
    Nebenwerte), Themen-Bosse, Helden-Fähigkeiten, Schreine, Elite-Gegner,
    tägliche Herausforderung
    ===================================================================== */
+
+/* ---------- Freischaltungen nach Konto-Level ----------
+   Man startet nur mit Ritter, Krypta, Ausrüstung, Händler und Schmied (Verbessern).
+   Alles andere kommt mit der Zeit – Helden-Auswahl etwa zum Ende von Schwierigkeit I. */
+const UNLOCKS = {
+  ability: { lvl: 2, name: 'Helden-Fähigkeit (Taste Q / ✨)' },
+  salvage: { lvl: 3, name: 'Schmied: Zerlegen' },
+  artifacts: { lvl: 5, name: 'Artefakte & antike Räume' },
+  daily: { lvl: 6, name: 'Tägliche Herausforderung' },
+  enchant: { lvl: 7, name: 'Schmied: Verzaubern' },
+  heroes: { lvl: 8, name: 'Helden-Auswahl' },
+};
+const isUnlocked = k => !!(Profile.data && Profile.data.level >= UNLOCKS[k].lvl);
+// Alles, was zwischen zwei Leveln neu dazukommt (für Ergebnis-Bildschirm und Lobby-Hinweis)
+function unlocksBetween(from, to) {
+  const out = [];
+  for (const U of Object.values(UNLOCKS)) if (U.lvl > from && U.lvl <= to) out.push({ lvl: U.lvl, name: U.name });
+  for (const D of DUNGEONS) if (D.unlock > from && D.unlock <= to) out.push({ lvl: D.unlock, name: 'Dungeon: ' + D.name });
+  for (const H of Object.values(HEROES)) if (H.unlock > from && H.unlock <= to) out.push({ lvl: H.unlock, name: 'Held: ' + H.icon + ' ' + H.name });
+  return out.sort((a, b) => a.lvl - b.lvl);
+}
+const nextUnlock = () => { const l = Profile.data.level; return unlocksBetween(l, 99)[0] || null; };
 
 /* ---------- Neue Gegner ---------- */
 Object.assign(ENEMIES, {
@@ -872,9 +894,9 @@ function generateDungeon(level, partySize, stage = 1) {
     if (mids[0] !== 'combat') { const ci = mids.indexOf('combat'); if (ci > 0) [mids[0], mids[ci]] = [mids[ci], mids[0]]; }
     let prev = null;
     main.forEach(([gx, gy], i) => { const r = mk(gx, gy, i === 0 ? 'start' : i === main.length - 1 ? 'boss' : mids[i - 1]); r.depth = i; if (prev) link(prev, r); prev = r; });
-    branches.forEach((br, bi) => { let p = rooms.get(K(...br.from)); br.cells.forEach(([gx, gy], i) => { const r = mk(gx, gy, i === br.cells.length - 1 ? (bi === 0 ? 'ancient' : 'loot') : pick(['combat', 'trap'])); r.depth = p.depth + 1; link(p, r); p = r; }); });
+    branches.forEach((br, bi) => { let p = rooms.get(K(...br.from)); br.cells.forEach(([gx, gy], i) => { const r = mk(gx, gy, i === br.cells.length - 1 ? (bi === 0 && isUnlocked('artifacts') ? 'ancient' : 'loot') : pick(['combat', 'trap'])); r.depth = p.depth + 1; link(p, r); p = r; }); });
     // Genau ein antiker Raum pro Stage (meist am Ende eines Nebenwegs, also optional)
-    if (![...rooms.values()].some(r => r.type === 'ancient')) { const c = [...rooms.values()].filter(r => r.type === 'combat' && r.depth > 1); if (c.length) pick(c).type = 'ancient'; else continue; }
+    if (isUnlocked('artifacts') && ![...rooms.values()].some(r => r.type === 'ancient')) { const c = [...rooms.values()].filter(r => r.type === 'combat' && r.depth > 1); if (c.length) pick(c).type = 'ancient'; else continue; }
     // Bossraum darf nur eine Tür haben
     const boss = [...rooms.values()].find(r => r.type === 'boss');
     if (Object.values(boss.doors).filter(Boolean).length !== 1) continue;
@@ -929,7 +951,7 @@ function buildRoom(r, level, partySize) {
     const st = r.stage || 1, gm = 1 + enemyLevel((typeof Run !== 'undefined' && Run.diff) || 0, st) * .2, D = (typeof Run !== 'undefined' && Run.dungeonId) ? DUNGEON_BY[Run.dungeonId] : DUNGEONS[0], diff = (typeof Run !== 'undefined' && Run.diff) || 0;
     obj({ type: 'npc', tx: 10, ty: 3, solid: true });
     const gear = randomItem(Math.max(1, rollRarity(1 + DIFFS[diff].loot)), Math.min(20, gearTier(diff, st) + 1), .3);
-    const spec = Math.random() < .6 ? makeArtifact(D.set, rollStars(diff)) : (s => (s.name = 'Schriftrolle: ' + SPELLS[s.spell].name, s))(makeSpell(Math.max(1, rollRarity(1.5))));
+    const spec = Math.random() < .6 && isUnlocked('artifacts') ? makeArtifact(D.set, rollStars(diff)) : (s => (s.name = 'Schriftrolle: ' + SPELLS[s.spell].name, s))(makeSpell(Math.max(1, rollRarity(1.5))));
     const wares = [{ it: { slot: 'potion', name: 'Heiltrank', rarity: 0 }, price: Math.round(POTION_PRICE * (1 + (st - 1) * .25)) },
       { it: gear, price: Math.round(itemValue(gear) * 1.6) },
       { it: spec, price: spec.slot === 'art' ? Math.round(55 * Math.pow(spec.stars, 1.7) * gm) : Math.round(itemValue(spec) * 1.4) }];
@@ -1967,6 +1989,7 @@ function aimPoint(h, dist) { // Zielpunkt in Blickrichtung, an Wänden gestoppt
   return { x, y };
 }
 function useAbility(h) {
+  if (h.isPlayer && !isUnlocked('ability')) { banner('', 'Helden-Fähigkeit ab Konto-Level ' + UNLOCKS.ability.lvl, 1.4, '#ff8a7a'); return; }
   if (h.downed || h.out || (h.abCd || 0) > 0) { if (h.isPlayer && (h.abCd || 0) > 0) sfx('wrong'); return; }
   const id = h.st.hero, A = ABILITIES[id], P = abilityPower(h); h.abCd = A.cd * (1 - Math.min(40, h.st.cdr || 0) / 100); h.abFlash = .3;
   if (id === 'ritter') { // Schildstoß
@@ -2114,7 +2137,7 @@ function buyWare(o) {
 }
 
 /* ---------- Artefakt-Beute ---------- */
-function dropArtifact(set, x, y, bonus = 0) { const s = clamp(rollStars(Run.diff || 0) + bonus + (Run.stage >= 4 && Math.random() < .3 ? 1 : 0), 2, 5); giveLoot(makeArtifact(set, s), x, y); }
+function dropArtifact(set, x, y, bonus = 0) { if (!isUnlocked('artifacts')) return giveLoot(randomItem(Math.max(1, rollRarity(1)), lootLvl(), .3), x, y); const s = clamp(rollStars(Run.diff || 0) + bonus + (Run.stage >= 4 && Math.random() < .3 ? 1 : 0), 2, 5); giveLoot(makeArtifact(set, s), x, y); }
 const runSet = () => DUNGEON_BY[Run.dungeonId || 'krypta'].set;
 
 /* ---------- Antike Räume: optionale Prüfung → Artefakt ---------- */
@@ -2382,6 +2405,7 @@ function drawHUD() {
     ctx.font = '26px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(HEROES[p.st.hero].icon, ax + sz / 2, y0 + sz / 2 + 2);
     if (cd > 0) { ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(ax + 3, y0 + 3 + (sz - 6) * (1 - cd / full), sz - 6, (sz - 6) * cd / full); txt(cd.toFixed(1), ax + sz / 2, y0 + sz / 2 - 5, 9, '#fff', 'center'); }
     if (p.abFlash > 0) { ctx.fillStyle = `rgba(255,255,255,${p.abFlash * 2})`; ctx.fillRect(ax, y0, sz, sz); }
+    if (!isUnlocked('ability')) { ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(ax + 3, y0 + 3, sz - 6, sz - 6); txt('Lv ' + UNLOCKS.ability.lvl, ax + sz / 2, y0 + sz / 2 - 4, 8, '#ff8a7a', 'center'); }
     txt(Input.touch ? '✨' : 'Q', ax + 4, y0 + 4, 8, '#ffd25a'); Run.hotbarRects.push({ x: ax, y: y0, w: sz, h: sz, i: 'ab' });
     const px = ax + sz + gap, np = Profile.data.potions; ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(px - 3, y0 - 3, sz + 6, sz + 6); ctx.fillStyle = np ? '#ff4a6a' : '#3a2e44'; ctx.fillRect(px, y0, sz, sz); ctx.fillStyle = '#1e1014'; ctx.fillRect(px + 3, y0 + 3, sz - 6, sz - 6);
     ctx.globalAlpha = np ? 1 : .35; ctx.drawImage(sprite('potion'), px + 5, y0 + 5, sz - 10, sz - 10); ctx.globalAlpha = 1;
@@ -2594,10 +2618,11 @@ const UI = {
     uiRoot.innerHTML = `<div class="screen clear">${this.topbar('')}
       <div id="lobbyMenu">
         <button class="btn big gold" id="bStart">⚔ Dungeon wählen</button>
-        <button class="btn" id="bDaily" style="width:100%">📅 Tägliche Herausforderung${Profile.data.daily && Profile.data.daily.key === dayKey() && Profile.data.daily.got ? ' ✓' : ' – Belohnung wartet!'}</button>
-        <div class="row"><button class="btn" id="bHero">${HEROES[Profile.data.hero].icon} Helden</button><button class="btn" id="bEquip">🛡 Ausrüstung</button><button class="btn" id="bArts">✦ Artefakte</button></div>
+        <button class="btn" id="bDaily" style="width:100%" ${isUnlocked('daily') ? '' : 'disabled'}>📅 Tägliche Herausforderung${!isUnlocked('daily') ? ' 🔒 Lv ' + UNLOCKS.daily.lvl : Profile.data.daily && Profile.data.daily.key === dayKey() && Profile.data.daily.got ? ' ✓' : ' – Belohnung wartet!'}</button>
+        <div class="row"><button class="btn" id="bHero" ${isUnlocked('heroes') ? '' : 'disabled'}>${isUnlocked('heroes') ? HEROES[Profile.data.hero].icon + ' Helden' : '🔒 Helden Lv ' + UNLOCKS.heroes.lvl}</button><button class="btn" id="bEquip">🛡 Ausrüstung</button><button class="btn" id="bArts" ${isUnlocked('artifacts') ? '' : 'disabled'}>${isUnlocked('artifacts') ? '✦ Artefakte' : '🔒 Artefakte Lv ' + UNLOCKS.artifacts.lvl}</button></div>
         <div class="row"><button class="btn" id="bFriends">👥 Freunde ${n > 1 ? '(' + n + '/4)' : ''}</button><button class="btn" id="bSet">⚙ Einstellungen</button></div>
         <div class="row"><button class="btn" id="bShop">💰 Händler</button><button class="btn" id="bSmith">🔨 Schmied</button></div>
+        ${(n => n ? `<div class="s" style="text-align:center;color:#9ad0ff">Nächste Freischaltung: ${esc(n.name)} – ab Konto-Level ${n.lvl}</div>` : '')(nextUnlock())}
         <div class="s muted" style="text-align:center">Runs: ${Profile.data.runs} · Siege: ${Profile.data.wins}</div>
       </div></div>`;
     const go = (id, f) => document.getElementById(id).onclick = () => { Sound.init(); sfx('click'); f(); };
@@ -2660,7 +2685,7 @@ const UI = {
             <canvas id="heroPrev" width="16" height="16" style="width:128px;height:128px;image-rendering:pixelated;background:radial-gradient(#3a2448,#120e16)"></canvas>
             <div class="col" id="eqR"></div>
           </div>
-          <button class="btn small" id="bToArts" style="margin-top:6px">✦ Artefakte (${ART_ORDER.filter(k => d.artEq[k]).length}/5 angelegt)</button>
+          <button class="btn small" id="bToArts" style="margin-top:6px;${isUnlocked('artifacts') ? '' : 'display:none'}">✦ Artefakte (${ART_ORDER.filter(k => d.artEq[k]).length}/5 angelegt)</button>
           <h3 style="margin-top:8px">Zauber-Hotbar (Tasten 1–4)</h3><div class="row" id="hot"></div>
           <div class="s" style="width:300px;margin-top:6px">
             <div>Leben: ${Math.round(st.maxHp)} · Verteidigung: ${st.def.toFixed(1)}</div>
@@ -2821,7 +2846,7 @@ const UI = {
         <div class="panel col" id="pick"></div>
         <div class="panel col" style="width:340px" id="anvil"></div>
       </div><div class="row" style="margin-top:12px"><button class="btn" id="bBack">← Zurück</button></div></div>`;
-    document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { sfx('click'); this.show('smith', null, b.dataset.tab); });
+    const TL = { salv: 'salvage', ench: 'enchant', art: 'artifacts' }; document.querySelectorAll('[data-tab]').forEach(b => { const k = TL[b.dataset.tab]; if (k && !isUnlocked(k)) { b.disabled = true; b.textContent += ' 🔒 Lv ' + UNLOCKS[k].lvl; } b.onclick = () => { sfx('click'); this.show('smith', null, b.dataset.tab); }; });
     const P = document.getElementById('pick'), A = document.getElementById('anvil'), go = loc => this.show('smith', loc, mode);
     const mkSlot = (loc, label) => { const el = slotEl(loc, label, { noDrag: true, onClick: (x, l) => go(l) }); if (selLoc === loc) el.classList.add('sel'); return el; };
     if (mode === 'art') {
@@ -2894,7 +2919,7 @@ const UI = {
           <div class="loot-line gold">Gold: +${fmt(r.gold)}${r.lost ? ` <span style="color:#ff6a5a">(−${fmt(r.lost)} verloren)</span>` : ''}</div>
           <div class="loot-line" style="color:#8fe05a">Erfahrung: +${r.xp}${r.ups ? ` · LEVEL UP! Konto-Level ${r.level}` : ''}</div>
           <div class="loot-line" style="color:#ffd25a">${HEROES[r.hero].icon} ${esc(HEROES[r.hero].name)}: +${r.xp} Helden-EP${r.heroUps ? ` · Held steigt auf Level ${r.heroLvl}!` : ''}</div>
-          ${Object.values(HEROES).filter(H => H.unlock > r.level - r.ups && H.unlock <= r.level).map(H => `<div class="loot-line" style="color:#ff8c1a">🔓 Neuer Held freigeschaltet: ${H.icon} ${esc(H.name)}!</div>`).join('')}
+          ${unlocksBetween(r.level - r.ups, r.level).map(u => `<div class="loot-line" style="color:#ff8c1a">🔓 Neu freigeschaltet: ${esc(u.name)}!</div>`).join('')}
           <div style="margin-top:8px">Beute:</div>
           ${r.items.length ? r.items.map(x => x.it.slot === 'art' ? `<div class="loot-line" style="color:${STAR_COL[x.it.stars]}">✦ ${esc(x.it.name)} ${'★'.repeat(x.it.stars)} <span class="muted">(Artefakt ${esc(ART_SETS[x.it.set].name)}${x.ok ? '' : ', Tasche voll → Essenz'})</span></div>` : `<div class="loot-line" style="color:${RARITY[x.it.rarity].color}">◆ ${esc(itemName(x.it))} <span class="muted">(${RARITY[x.it.rarity].name}${x.ok ? '' : ', Inventar voll → verkauft'})</span></div>`).join('') : '<div class="loot-line muted">Keine Gegenstände gefunden.</div>'}
         </div>
@@ -3012,6 +3037,7 @@ const Touch = {
     this.spellBtns.forEach((b, i) => { const it = p.hotbar[i], k = it ? it.id : '';
       if (b.dataset.k !== k) { b.dataset.k = k; b.querySelectorAll('canvas').forEach(c => c.remove()); if (it) b.insertAdjacentElement('afterbegin', iconCanvas(it)); b.style.borderColor = it ? RARITY[it.rarity].color : '#ffffff22'; }
       b.style.display = it ? '' : 'none'; if (it) { const st = spellStats(it); cdSet(b, Math.max(0, p.spellCd[i]), st.cd); b.classList.toggle('off', p.mana < st.mana); } });
+    this.abBtn.style.display = isUnlocked('ability') ? '' : 'none';
     const A = ABILITIES[p.st.hero]; cdSet(this.abBtn, Math.max(0, p.abCd || 0), A.cd * (1 - Math.min(40, p.st.cdr || 0) / 100));
     this.potBtn.querySelector('.cnt').textContent = '×' + Profile.data.potions; this.potBtn.classList.toggle('off', !Profile.data.potions);
   },
