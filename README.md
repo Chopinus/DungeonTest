@@ -11,9 +11,18 @@ Alles steckt in **einer Datei**: `index.html` im Browser öffnen und losspielen 
 | Ausweichen | Leertaste / Rechtsklick | 💨-Knopf |
 | Interagieren / Wiederbeleben (halten) | E | ✋-Knopf |
 | Zauber | 1–4 oder Hotbar anklicken | Hotbar antippen |
+| Helden-Fähigkeit | Q | ✨-Knopf oder Hotbar |
+| Heiltrank | R | Trank-Feld in der Hotbar |
 | Pause | ESC | II oben rechts |
 
 ## Inhalte
+- **Dungeon-Auswahl**: 4 Dungeons (Krypta, Moosige Kerker, Glutschlund, Frostgewölbe) mit je 5 Stufen (I–V). Jeder Dungeon hat eigene Gegner, einen eigenen Boss (Knochenkönig, Moosgolem, Glutwyrm, Frostkönigin) und ein eigenes Artefakt-Set. Sieg über den Boss schaltet die nächste Stufe frei.
+- **Artefakte** (wie in Genshin): 5 Plätze (Blüte, Feder, Sanduhr, Kelch, Krone), 2★–5★ je nach Stufe, Hauptwert + bis zu 4 Nebenwerte, Set-Boni für 2 und 4 Teile, aufwerten mit Essenz (2★ bis +8 … 5★ bis +20). 6 Sets: Knochenkrone, Wildwuchs, Glutherz, Frostschwur, Goldene Gier (Ultra-Schatzkammer), Sturmläufer (Tagesbelohnung)
+- **Helden-Fähigkeiten**: Schildstoß, Pfeilhagel, Schattenschleier, Meteor, Raserei
+- **Heiltränke**, **Schreine** (Segen oder Pakt für den ganzen Run), **Händler im Dungeon**, **Mimics**
+- **Elite-Gegner** (Flink, Explosiv, Gepanzert, Vampir, Eisig) und neue Gegner: Skelettschütze, Höhlenspinne, Steinwächter, Irrlicht
+- **Schmied**: Verbessern, Zerlegen (→ Essenz), Verzaubern (Passiv neu würfeln), Artefakte aufwerten
+- **Tägliche Herausforderung**: fester Dungeon für alle, wechselnde Tagesregel, einmal täglich ein Sturmläufer-Artefakt
 - **Lobby** mit animiertem Titel, Fackeln und deiner Party am Lagerfeuer
 - **Freunde & Party**: bis zu 4 Spieler, Bereit-Status, Leader kann Mitglieder entfernen. Freunde sind simuliert (`MockSocialService`); ein echter Server kann über die Schnittstelle `SocialService` angebunden werden.
 - **Ausrüstung**: Waffe, Helm, Brust, Hose, Schuhe, Schmuck, 4 Zauber-Slots, 30 Inventarplätze, Drag & Drop, Tooltips mit Vergleich
