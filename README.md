@@ -24,6 +24,9 @@ Alles steckt in **einer Datei**: `index.html` im Browser öffnen und losspielen 
 - **Rüstungsklassen**: Stoff, Leder, Kette, Platte (Verteidigung gegen Tempo)
 - **Seltenheiten**: Gewöhnlich, Selten, Episch, Legendär (Farbe, Glühen, Truhen-Lichtstrahl)
 - **Zauber** (ca. 3 % pro Truhe): Feuerball, Heilung, Frostnova, Blitzkette, Schattenschritt
+- **Stages**: Nach dem Boss erscheinen zwei Portale – grün = Dungeon verlassen und Beute sichern, lila = tiefer hinab in die nächste Stage (größer, stärkere Gegner, besserer Loot, neues Thema: Krypta, Moosige Kerker, Glutschlund, Frostgewölbe). Wer fällt, verliert die Hälfte des Golds.
+- **Ultra-Schatzkammer** nach jeder 5. Stage: Goldberge, Statuen, 5 Truhen (meist episch/legendär) und mit 50 % eine Zauber-Schriftrolle
+- **Raumgestaltung**: Kampfräume mit 6 Layouts (Säulen, Kistenlager, Mauerreste, Säulenhalle), Rätselräume mit Bücherregalen und Runenkreis, Fallenräume mit Blutflecken, Schatzkammern golden
 - **Dungeon-Runs**: zufällige Räume – Kampf (Wellen), Rätsel (Hebel, Kisten auf Druckplatten, Feuerschalen, Runen), Fallen (Stacheln, Feuerstrahlen), Schatzkammern, Boss mit 3 Phasen
 - Minimap, HP/Mana, Hotbar, Screenshake, Partikel, Schadenszahlen, Chiptune-Sounds
 - **Händler** und **Schmied** (Verbessern bis +5) in der Lobby
