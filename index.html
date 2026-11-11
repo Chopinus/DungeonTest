@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Dungeon Test</title>
+<title>Dungeon v0.1 – Game Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
@@ -117,6 +117,8 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 // Begrenzte Palette (Buchstabe -> Farbe) für alle Pixel-Sprites
+// Version und ob das Spiel im Game Hub läuft (dann gibt es einen Zurück-Knopf)
+const GAME_VERSION = 'v0.1', IN_HUB = /dungeon/i.test(location.pathname) && location.protocol.startsWith('http');
 const PAL = {
   k: '#0b0a0f', d: '#1c1a24', g: '#5a5468', l: '#9a94a8', w: '#e8e2d0', W: '#ffffff',
   r: '#9e2a22', R: '#ff4a3a', o: '#e67e22', y: '#f4d03f', Y: '#fff2a0', b: '#7a4a2a', B: '#4a2c18',
@@ -2466,7 +2468,7 @@ function renderLobby(t) {
   ctx.fillStyle = '#000'; for (let d = 6; d > 0; d -= 2) ctx.fillText('DUNGEON', W / 2 + d, ly + d);
   const g = ctx.createLinearGradient(0, ly, 0, ly + 54); g.addColorStop(0, '#fff2a0'); g.addColorStop(.5, '#ffb22a'); g.addColorStop(1, '#b8461a');
   ctx.globalAlpha = flick; ctx.fillStyle = g; ctx.fillText('DUNGEON', W / 2, ly); ctx.globalAlpha = 1;
-  ctx.font = '26px ' + FONT; ctx.fillStyle = '#000'; ctx.fillText('— T E S T —', W / 2 + 3, ly + 72 + 3); ctx.fillStyle = '#c8b8d8'; ctx.fillText('— T E S T —', W / 2, ly + 72);
+  ctx.font = '26px ' + FONT; ctx.fillStyle = '#000'; ctx.fillText('— ' + GAME_VERSION + ' —', W / 2 + 3, ly + 72 + 3); ctx.fillStyle = '#c8b8d8'; ctx.fillText('— ' + GAME_VERSION + ' —', W / 2, ly + 72);
   // Party-Helden am Lagerfeuer
   const mem = Social.party ? Social.party.members : [];
   const fx = W / 2, fy = H * .62;
@@ -2625,7 +2627,10 @@ const UI = {
         <div class="row"><button class="btn" id="bShop">💰 Händler</button><button class="btn" id="bSmith">🔨 Schmied</button></div>
         ${(n => n ? `<div class="s" style="text-align:center;color:#9ad0ff">Nächste Freischaltung: ${esc(n.name)} – ab Konto-Level ${n.lvl}</div>` : '')(nextUnlock())}
         <div class="s muted" style="text-align:center">Runs: ${Profile.data.runs} · Siege: ${Profile.data.wins}</div>
-      </div></div>`;
+        ${IN_HUB ? '<button class="btn small" id="bHub">← Zurück zum Game Hub</button>' : ''}
+      </div>
+      <div class="panel s" style="position:absolute;top:64px;right:12px;max-width:300px;padding:10px;line-height:1.7;border-color:#ffb02e88"><b style="color:#ffb02e">${GAME_VERSION} · Testversion</b><br>Spielstände werden später zurückgesetzt. Diese Version ist dafür da, Feedback und Verbesserungsvorschläge zu sammeln${IN_HUB ? ' – schreib sie im Game Hub unter „Ideen &amp; Vorschläge“ (Spiel: Dungeon).' : '.'}</div></div>`;
+    const hb = document.getElementById('bHub'); if (hb) hb.onclick = () => { sfx('click'); location.href = '/'; };
     const go = (id, f) => document.getElementById(id).onclick = () => { Sound.init(); sfx('click'); f(); };
     go('bStart', () => this.show('dungeons')); go('bDaily', () => this.show('daily')); go('bArts', () => this.show('arts')); go('bEquip', () => this.show('equip')); go('bFriends', () => this.show('party', false));
     go('bShop', () => this.show('shop')); go('bHero', () => this.show('heroes')); go('bSmith', () => this.show('smith')); go('bSet', () => this.show('settings'));
