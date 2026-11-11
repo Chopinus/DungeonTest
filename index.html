@@ -19,12 +19,18 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 #touch,#touch *,#game{touch-action:none!important}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden;touch-action:manipulation;user-select:none;-webkit-user-select:none;overscroll-behavior:none}
+body{position:fixed;inset:0;width:100%}
+#ui,#ui *{overscroll-behavior:none}
+#ui .screen{touch-action:none}
+#ui input{touch-action:auto}
 #app{position:fixed;inset:0;display:grid;place-items:center}
 #game{image-rendering:pixelated;image-rendering:crisp-edges;background:#000;display:block}
 #ui{position:fixed;inset:0;pointer-events:none}
 #ui>*{pointer-events:auto}
-.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;overflow:auto;padding:16px}
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;overflow:hidden;padding:16px}
+/* Menüs werden automatisch so verkleinert, dass alles ohne Scrollen auf den Bildschirm passt */
+.fitbox{display:flex;flex-direction:column;align-items:center;transform-origin:top center;width:100%;flex:none}
 .screen.clear{pointer-events:none}.screen.clear>*{pointer-events:auto}
 .panel{background:var(--panel);border:4px solid var(--line);box-shadow:0 0 0 4px #000,inset 0 0 0 2px #000,0 10px 30px rgba(0,0,0,.6);padding:16px;image-rendering:pixelated}
 h1,h2,h3{font-weight:normal;margin:0 0 12px;letter-spacing:1px}
@@ -81,6 +87,11 @@ small,.s{font-size:9px;line-height:1.6}
 #touch.show{display:block}
 .tbtn{position:absolute;pointer-events:auto;border-radius:50%;background:#ffffff1a;border:3px solid #ffffff55;color:#fff;font-family:var(--font);font-size:10px;display:grid;place-items:center;text-shadow:1px 1px 0 #000}
 .tbtn:active,.tbtn.down{background:#ffffff40}
+.tbtn canvas{position:absolute;inset:14%;width:72%;height:72%;image-rendering:pixelated;pointer-events:none}
+.tbtn .cd{position:absolute;left:0;right:0;bottom:0;background:#000a;border-radius:0 0 50% 50%;pointer-events:none}
+.tbtn .cdt{position:absolute;inset:0;display:grid;place-items:center;font-size:2.4vmin;pointer-events:none;text-shadow:1px 1px 0 #000}
+.tbtn .cnt{position:absolute;right:-2px;bottom:-4px;font-size:2vmin;background:#000c;border:2px solid #ffffff55;border-radius:6px;padding:2px 3px;pointer-events:none}
+.tbtn.off{opacity:.35}
 #stick{position:absolute;left:0;top:0;width:45%;height:100%;pointer-events:auto}
 #knob{position:absolute;width:110px;height:110px;border-radius:50%;border:3px solid #ffffff44;display:none}
 #knob i{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px;border-radius:50%;background:#ffffff55}
@@ -2260,9 +2271,16 @@ function drawHUD() {
   if (Run.boss) { const b = Run.boss, w = 420; txt(b.D.name, canvas.width / 2, 14, 10, '#ff8a7a', 'center'); bar(canvas.width / 2 - w / 2, 32, w, 12, b.hp / b.maxHp, b.phase === 3 ? '#ff2a1a' : '#c0392b');
     for (const t of [.66, .33]) { ctx.fillStyle = '#000'; ctx.fillRect(canvas.width / 2 - w / 2 + w * t - 1, 32, 3, 12); } }
   drawMinimap();
+  // Aktive Segen/Pakte und Tagesregel
+  Run.blessings.forEach((k, i) => { const S = SHRINES[k]; ctx.fillStyle = S.col; ctx.fillRect(20 + i * 18, 84 + (Run.heroes.length - 1) * 22, 12, 12); ctx.fillStyle = '#000'; ctx.fillRect(23 + i * 18, 87 + (Run.heroes.length - 1) * 22, 6, 6); });
+  if (Run.daily) txt('📅 ' + DAILY_MODS[Run.mod].name, canvas.width - 18, 210, 8, '#fff27a', 'right'); else txt(DIFFS[Run.diff].n === 'I' ? '' : 'Stufe ' + DIFFS[Run.diff].n, canvas.width - 18, 210, 8, '#ffb02e', 'right');
   // Hotbar (Zauber 1–4) + Waffe + Ausweichen
   const sz = 54, gap = 8, n = 4, x0 = canvas.width / 2 - ((n + 3) * (sz + gap)) / 2, y0 = H - sz - 14;
   Run.hotbarRects = [];
+  if (Input.touch) { // Touch: Zauber/Fähigkeit/Trank liegen als Knöpfe am rechten Daumen
+    const hint = !p.downed && interactHint(p); if (hint) txt('[✋] ' + hint, p.x * SCALE, (p.y - 30) * SCALE, 9, '#fff2a0', 'center');
+    if (Run.msg) { const m = Run.msg, a = Math.min(1, m.t * 4, (m.dur - m.t) * 3); ctx.globalAlpha = a; if (m.text) txt(m.text, canvas.width / 2, 130, 18, m.col, 'center'); if (m.sub) txt(m.sub, canvas.width / 2, m.text ? 160 : 140, 9, '#e8e2d0', 'center'); ctx.globalAlpha = 1; }
+    return; }
   for (let i = 0; i < n; i++) {
     const it = p.hotbar[i], x = x0 + i * (sz + gap);
     ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(x - 3, y0 - 3, sz + 6, sz + 6); ctx.fillStyle = it ? RARITY[it.rarity].color : '#3a2e44'; ctx.fillRect(x, y0, sz, sz); ctx.fillStyle = '#120e16'; ctx.fillRect(x + 3, y0 + 3, sz - 6, sz - 6);
@@ -2288,9 +2306,6 @@ function drawHUD() {
     ctx.globalAlpha = np ? 1 : .35; ctx.drawImage(sprite('potion'), px + 5, y0 + 5, sz - 10, sz - 10); ctx.globalAlpha = 1;
     if (p.potCd > 0) { ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.fillRect(px + 3, y0 + 3, sz - 6, sz - 6); }
     txt('×' + np, px + sz - 4, y0 + sz - 14, 9, '#fff', 'right'); txt(Input.touch ? '🧪' : 'R', px + 4, y0 + 4, 8, '#ffd25a'); Run.hotbarRects.push({ x: px, y: y0, w: sz, h: sz, i: 'pot' }); }
-  // Aktive Segen/Pakte und Tagesregel
-  Run.blessings.forEach((k, i) => { const S = SHRINES[k]; ctx.fillStyle = S.col; ctx.fillRect(20 + i * 18, 84 + (Run.heroes.length - 1) * 22, 12, 12); ctx.fillStyle = '#000'; ctx.fillRect(23 + i * 18, 87 + (Run.heroes.length - 1) * 22, 6, 6); });
-  if (Run.daily) txt('📅 ' + DAILY_MODS[Run.mod].name, canvas.width - 18, 210, 8, '#fff27a', 'right'); else txt(DIFFS[Run.diff].n === 'I' ? '' : 'Stufe ' + DIFFS[Run.diff].n, canvas.width - 18, 210, 8, '#ffb02e', 'right');
   // Interaktions-Hinweis
   const hint = !p.downed && interactHint(p); if (hint) txt((Input.touch ? '[✋] ' : '[E] ') + hint, p.x * SCALE, (p.y - 30) * SCALE, 9, '#fff2a0', 'center');
   // Banner
@@ -2474,7 +2489,19 @@ addEventListener('pointerdown', e => { if (tipEl.classList.contains('pinned') &&
 const UI = {
   cur: null, sell: null,
   hide() { uiRoot.innerHTML = ''; hideTip(); this.cur = null; },
-  show(name, ...a) { this.cur = [name, a]; hideTip(); this.sell = null; uiRoot.innerHTML = ''; this[name](...a); },
+  show(name, ...a) { this.cur = [name, a]; hideTip(); this.sell = null; uiRoot.innerHTML = ''; this[name](...a); this.fit(); },
+  // Inhalt eines Menüs so skalieren, dass er ohne Scrollen ganz sichtbar ist
+  fit() {
+    for (const scr of uiRoot.querySelectorAll('.screen')) {
+      let box = scr.querySelector(':scope > .fitbox');
+      if (!box) { box = document.createElement('div'); box.className = 'fitbox'; while (scr.firstChild) box.appendChild(scr.firstChild); scr.appendChild(box); }
+      box.style.transform = ''; box.style.marginTop = box.style.marginBottom = box.style.minHeight = '';
+      const cs = getComputedStyle(scr), availH = scr.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom), availW = scr.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const h = box.scrollHeight, w = box.scrollWidth, s = Math.min(1, availH / h, availW / w);
+      if (s < 1) { box.style.transform = `scale(${s})`; box.style.marginBottom = -(h * (1 - s)) + 'px'; }
+      if (scr.classList.contains('clear')) box.style.minHeight = (availH / s) + 'px'; // Lobby: Menü bleibt unten
+    }
+  },
   refresh() { if (this.cur) this.show(this.cur[0], ...this.cur[1]); },
   topbar(title) {
     const d = Profile.data, need = Profile.xpNeed(d.level);
@@ -2782,6 +2809,7 @@ const UI = {
         <button class="btn gold big" id="bOk" style="margin-top:12px">Zurück zur Lobby</button>
       </div></div>`;
     document.getElementById('bOk').onclick = () => { sfx('click'); Social.resetReady(); this.show('lobby'); };
+    this.fit();
   },
   pause() {
     const el = document.createElement('div'); el.className = 'screen'; el.style.justifyContent = 'center'; el.style.background = 'rgba(0,0,0,.6)'; el.id = 'pauseScr';
@@ -2789,7 +2817,7 @@ const UI = {
       <button class="btn big gold" id="pRes">Weiter</button>
       <div class="s muted" style="line-height:1.8">WASD laufen · Maus zielen · Klick angreifen · Leertaste ausweichen · E interagieren (gedrückt halten zum Wiederbeleben) · 1–4 Zauber · Q Fähigkeit · R Heiltrank</div>
       <button class="btn red" id="pQuit">Run aufgeben (50 % Gold verloren)</button></div>`;
-    uiRoot.appendChild(el);
+    uiRoot.appendChild(el); this.fit();
     document.getElementById('pRes').onclick = () => { sfx('click'); togglePause(false); };
     document.getElementById('pQuit').onclick = () => { sfx('click'); togglePause(false); endRun('abort'); };
   },
@@ -2810,7 +2838,7 @@ function resize() {
   const s = Math.min(innerWidth / canvas.width, innerHeight / canvas.height);
   canvas.style.width = Math.floor(canvas.width * s) + 'px'; canvas.style.height = Math.floor(canvas.height * s) + 'px';
 }
-addEventListener('resize', resize); resize();
+addEventListener('resize', () => { resize(); if (typeof UI !== 'undefined') UI.fit(); }); resize();
 function toGame(cx, cy) { const r = canvas.getBoundingClientRect(); return { x: (cx - r.left) / r.width * VW, y: (cy - r.top) / r.height * VH, sx: (cx - r.left) / r.width * canvas.width, sy: (cy - r.top) / r.height * canvas.height }; }
 
 /* ---------- Tastatur & Maus ---------- */
@@ -2865,9 +2893,16 @@ const Touch = {
       const end = e => { if (e.pointerId !== pid) return; pid = null; const S = Input.stick, l = Math.hypot(S.dx, S.dy); if (S.t <= .35 || l > .3) Input.release = { dir: l > .3 ? Math.atan2(S.dy, S.dx) : null }; S.on = false; S.dx = S.dy = 0; b.classList.remove('down'); knob.style.display = 'none'; };
       b.addEventListener('pointerup', end); b.addEventListener('pointercancel', end); this.el.appendChild(b);
     }
-    mk('💨', 'right:22vmin;bottom:3vmin;width:10vmin;height:10vmin;font-size:4vmin', () => Input.dodge = true);
-    mk('✨', 'right:21vmin;bottom:15vmin;width:10vmin;height:10vmin;font-size:4vmin', () => Input.ability = true);
-    mk('✋', 'right:5vmin;bottom:23vmin;width:10vmin;height:10vmin;font-size:4vmin', () => { Input.interactPressed = true; Input.interact = true; }, () => Input.interact = false);
+    // Alle Aktionen im Bogen um den Angriffsknopf – erreichbar mit dem rechten Daumen (wie Brawl Stars)
+    const at = (deg, r, size) => { const a = deg * Math.PI / 180; return `right:${(12.5 - Math.cos(a) * r - size / 2).toFixed(1)}vmin;bottom:${(13.5 + Math.sin(a) * r - size / 2).toFixed(1)}vmin;width:${size}vmin;height:${size}vmin;font-size:${(size * .42).toFixed(1)}vmin`; };
+    const withCd = b => { b.insertAdjacentHTML('beforeend', '<i class="cd" style="height:0"></i><span class="cdt"></span>'); return b; };
+    mk('💨', at(180, 20, 10.5), () => Input.dodge = true);
+    this.abBtn = withCd(mk('✨', at(132, 20, 10.5), () => Input.ability = true));
+    mk('✋', at(86, 20, 10.5), () => { Input.interactPressed = true; Input.interact = true; }, () => Input.interact = false);
+    // Äußerer Bogen: Zauber 1–4 und Heiltrank
+    this.spellBtns = [0, 1, 2, 3].map(i => { const b = withCd(mk('', at(176 - i * 24, 32, 9), () => { Input.spells[i] = true; Run.hotFlash = { i, t: .2 }; })); b.dataset.k = ''; return b; });
+    this.potBtn = mk('<span class="cnt"></span>', at(80, 32, 9), () => Input.potion = true);
+    this.potBtn.insertAdjacentHTML('afterbegin', '<canvas width="16" height="16"></canvas>'); this.potBtn.querySelector('canvas').getContext('2d').drawImage(sprite('potion'), 0, 0);
     mk('II', 'right:1.5vmin;top:1.5vmin;width:7vmin;height:7vmin;font-size:2.4vmin;border-radius:10px', () => togglePause());
     // Joystick: erscheint dort, wo der Daumen aufsetzt
     const st = document.getElementById('stick'), knob = document.getElementById('knob'), inner = knob.firstElementChild; let id = null, cx = 0, cy = 0;
@@ -2877,6 +2912,16 @@ const Touch = {
     st.addEventListener('pointermove', e => { if (e.pointerId !== id) return; let dx = e.clientX - cx, dy = e.clientY - cy; const d = Math.hypot(dx, dy), m = 45; if (d > m) { dx = dx / d * m; dy = dy / d * m; } inner.style.transform = `translate(${dx}px,${dy}px)`; Input.move.x = dx / m; Input.move.y = dy / m; if (d < 8) Input.move.x = Input.move.y = 0; });
     const end = e => { if (e.pointerId !== id) return; id = null; knob.style.display = 'none'; Input.move.x = Input.move.y = 0; Input.stickActive = false; };
     st.addEventListener('pointerup', end); st.addEventListener('pointercancel', end);
+  },
+  // Pro Bild: Zauber-Icons, Abklingzeiten und Trank-Anzahl auf den Touch-Knöpfen aktualisieren
+  tick() {
+    if (!this.built || !Run.active || !this.el.classList.contains('show')) return; const p = player(); if (!p) return;
+    const cdSet = (b, cd, full) => { const f = full > 0 ? clamp(cd / full, 0, 1) : 0; b.querySelector('.cd').style.height = (f * 100).toFixed(0) + '%'; b.querySelector('.cdt').textContent = cd > 0 ? cd.toFixed(cd < 10 ? 1 : 0) : ''; };
+    this.spellBtns.forEach((b, i) => { const it = p.hotbar[i], k = it ? it.id : '';
+      if (b.dataset.k !== k) { b.dataset.k = k; b.querySelectorAll('canvas').forEach(c => c.remove()); if (it) b.insertAdjacentElement('afterbegin', iconCanvas(it)); b.style.borderColor = it ? RARITY[it.rarity].color : '#ffffff22'; }
+      b.style.display = it ? '' : 'none'; if (it) { const st = spellStats(it); cdSet(b, Math.max(0, p.spellCd[i]), st.cd); b.classList.toggle('off', p.mana < st.mana); } });
+    const A = ABILITIES[p.st.hero]; cdSet(this.abBtn, Math.max(0, p.abCd || 0), A.cd * (1 - Math.min(40, p.st.cdr || 0) / 100));
+    this.potBtn.querySelector('.cnt').textContent = '×' + Profile.data.potions; this.potBtn.classList.toggle('off', !Profile.data.potions);
   },
   update() { const on = Run.active && this.enabled(); if (on) this.build(); this.el.classList.toggle('show', on); Input.touch = on || (Run.active && Input.touch); if (!on) Input.touch = false; },
 };
@@ -2888,7 +2933,7 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   try {
-    if (Run.active && Run.room) { if (!Run.paused) updateRun(dt); renderRun(); }
+    if (Run.active && Run.room) { if (!Run.paused) updateRun(dt); renderRun(); Touch.tick(); }
     else renderLobby(now / 1000);
   } catch (err) { console.error(err); }
   requestAnimationFrame(frame);

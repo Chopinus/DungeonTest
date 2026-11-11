@@ -10,9 +10,9 @@ Alles steckt in **einer Datei**: `index.html` im Browser öffnen und losspielen 
 | Angreifen | Linksklick (gedrückt halten) | ⚔-Knopf: antippen = automatisch zielen, ziehen = selbst zielen (Zielanzeige), loslassen = Angriff, halten = Dauerangriff |
 | Ausweichen | Leertaste / Rechtsklick | 💨-Knopf |
 | Interagieren / Wiederbeleben (halten) | E | ✋-Knopf |
-| Zauber | 1–4 oder Hotbar anklicken | Hotbar antippen |
-| Helden-Fähigkeit | Q | ✨-Knopf oder Hotbar |
-| Heiltrank | R | Trank-Feld in der Hotbar |
+| Zauber | 1–4 oder Hotbar anklicken | Zauber-Knöpfe im Bogen um den Angriffsknopf |
+| Helden-Fähigkeit | Q | ✨-Knopf neben dem Angriffsknopf |
+| Heiltrank | R | Trank-Knopf oben im Bogen |
 | Pause | ESC | II oben rechts |
 
 ## Inhalte
