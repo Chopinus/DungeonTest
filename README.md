@@ -6,16 +6,16 @@ Alles steckt in **einer Datei**: `index.html` im Browser öffnen, funktioniert a
 ## Maschinen
 | Maschine | Freischalten | Was sie macht | Röhre |
 |---|---|---|---|
-| 🎲 Würfeltisch | Start | Würfeln, Kombis wie beim Kniffel (Pasch … Kniffel), Goldwürfel ×5 | Pasch/Drilling/… → Münzen in den Automaten, Straße → Bonus-Los |
-| 🎰 Spielautomat | 400 | 3–5 Walzen, 🃏 Joker, 7️⃣7️⃣7️⃣ = Glücksstaub | 3+ gleiche → Kugeln ins Plinko |
-| 🎟️ Rubbellos-Drucker | 15 Tsd. | druckt Lose, die man mit dem Finger freirubbelt | Gewinn → Kugel ins Plinko, 💎 → 3 Kugeln |
-| ⚪ Plinko | 600 Tsd. | Kugeln fallen durch Stifte in Gewinnfächer | Randfächer zahlen am meisten und geben manchmal Glücksstaub |
+| 🎲 Würfeltisch | Start | Würfeln, Kombis wie beim Kniffel (Pasch … Kniffel), Goldwürfel ×5 | Zwei Paare, Drilling … → Münzen (Freispiele, max. 10) in den Automaten, Straße → Bonus-Los |
+| 🎰 Spielautomat | 2.500 | 3–5 Walzen, 🃏 Joker, 7️⃣7️⃣7️⃣ = Glücksstaub | 3+ gleiche → Kugeln ins Plinko |
+| 🎟️ Rubbellos-Drucker | 600 Tsd. | druckt Lose, die man mit dem Finger freirubbelt | Gewinn → Kugel ins Plinko, 💎 → 3 Kugeln |
+| ⚪ Plinko | 500 Mio. | Kugeln fallen durch Stifte in Gewinnfächer | Randfächer zahlen am meisten und geben manchmal Glücksstaub |
 
 - Jede Maschine hat eigene Upgrades und einen Helfer-Roboter, der sie automatisch spielt.
 - **Ketten:** Was über eine Röhre ankommt, zählt als Kettenglied. Jedes Glied gibt +5 % (mit Talent +10 %).
 - **Goldener Chip:** Taucht ab und zu auf. Antippen gibt eine Heiße Hand (×7), einen Goldregen oder Glücksstaub.
 - **Glücksstaub und Talentbaum:** 12 Talente in 3 Ästen. Sie bleiben auch nach dem Bankrott erhalten.
-- **Bankrott (Prestige):** Ab 50 Mio. in einer Runde kann man alles abgeben und bekommt Glückssterne (+20 % auf alles pro Stern).
+- **Bankrott (Prestige):** Ab 33 Mrd. in einer Runde (erster Stern, bei guter Spielweise nach etwa 40–90 Minuten) kann man alles abgeben und bekommt Glückssterne (+20 % auf alles pro Stern).
 - **Offline-Gewinn:** bis 12 Stunden, 50 % (mit Talent 100 %).
 - Der Spielstand liegt im Browser (localStorage).
 

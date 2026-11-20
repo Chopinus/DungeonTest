@@ -109,7 +109,7 @@ function fmt(n) {
 }
 
 /* ---------- Spielstand ---------- */
-const SAVE_KEY = 'gp.save.v1';
+const SAVE_KEY = 'gp.save.v2';
 const fresh = () => ({
   chips: 0, run: 0, life: 0, dust: 0, stars: 0, resets: 0, tal: {}, t: Date.now(), rate: 0,
   dice: { n: 1, face: 0, speed: 0, gold: 0, auto: 0 },
@@ -144,38 +144,38 @@ const has = id => !!S.tal[id];
 const ALLT = TAL.flatMap(b => b.list);
 
 /* ---------- Wirtschaft ---------- */
-const UNLOCK = { slot: 400, scr: 15000, plk: 600000 };
+const UNLOCK = { slot: 2500, scr: 6e5, plk: 5e8 };
 const unlockCost = k => UNLOCK[k] * (has('kapital') ? 0.5 : 1);
-const PRESTIGE_MIN = 5e7;
+const PRESTIGE_MIN = 3e11;
 const starsFor = run => Math.floor(3 * Math.sqrt(run / PRESTIGE_MIN));
 let boostMul = 1, boostEnd = 0;
 const globalMul = () => (1 + S.stars * 0.2) * (Date.now() < boostEnd ? boostMul : 1);
 const speedMul = () => (has('oel') ? 1.25 : 1);
 const UP = {
   dice: [
-    { k: 'n', e: '🎲', n: 'Noch ein Würfel', d: l => `${l} Würfel auf dem Tisch`, cost: l => 8 * Math.pow(1.42, l - 1), max: 40 },
-    { k: 'face', e: '⬆️', n: 'Bessere Seiten', d: l => `Augenzahlen ×${fmt(Math.pow(2, l))}`, cost: l => 60 * Math.pow(4.2, l) },
-    { k: 'speed', e: '⚡', n: 'Schnellere Hand', d: l => `Wurf alle ${diceCd().toFixed(2).replace('.', ',')} s`, cost: l => 40 * Math.pow(2.4, l), max: 15 },
-    { k: 'gold', e: '🟨', n: 'Goldwürfel', d: l => `${goldChance(l)} % Chance pro Würfel auf ×5`, cost: l => 300 * Math.pow(3, l), max: 10 },
-    { k: 'auto', e: '🤖', n: 'Helfer-Hand', d: l => (l ? `würfelt automatisch · Gewinn ×${l}` : 'würfelt automatisch für dich'), cost: l => 150 * Math.pow(6, l), max: 5 },
+    { k: 'n', e: '🎲', n: 'Noch ein Würfel', d: l => `${l} Würfel auf dem Tisch`, cost: l => 15 * Math.pow(2, l - 1), max: 40 },
+    { k: 'face', e: '⬆️', n: 'Bessere Seiten', d: l => `Augenzahlen ×${fmt(Math.pow(2, l))}`, cost: l => 200 * Math.pow(11, l) },
+    { k: 'speed', e: '⚡', n: 'Schnellere Hand', d: l => `Wurf alle ${diceCd().toFixed(2).replace('.', ',')} s`, cost: l => 100 * Math.pow(4, l), max: 12 },
+    { k: 'gold', e: '🟨', n: 'Goldwürfel', d: l => `${goldChance(l)} % Chance pro Würfel auf ×5`, cost: l => 5000 * Math.pow(7, l), max: 10 },
+    { k: 'auto', e: '🤖', n: 'Helfer-Hand', d: l => (l ? 'würfelt automatisch für dich' : 'würfelt automatisch, auch wenn du nicht tippst'), cost: l => 800, max: 1 },
   ],
   slot: [
-    { k: 'val', e: '💰', n: 'Höhere Gewinne', d: l => `Gewinne ×${fmt(Math.pow(2.2, l))}`, cost: l => 600 * Math.pow(3.6, l) },
-    { k: 'reels', e: '🎰', n: 'Extra-Walze', d: l => `${l} Walzen – mehr Walzen, größere Reihen`, cost: l => 20000 * Math.pow(40, l - 3), max: 5, min: 3 },
-    { k: 'speed', e: '⚡', n: 'Schnellere Walzen', d: l => `Dreh alle ${slotCd().toFixed(1).replace('.', ',')} s`, cost: l => 900 * Math.pow(2.5, l), max: 12 },
-    { k: 'auto', e: '🤖', n: 'Hebel-Roboter', d: l => (l ? `dreht automatisch · Gewinn ×${l}` : 'dreht automatisch für dich'), cost: l => 2500 * Math.pow(6, l), max: 5 },
+    { k: 'val', e: '💰', n: 'Höhere Gewinne', d: l => `Gewinne ×${fmt(Math.pow(2, l))}`, cost: l => 8000 * Math.pow(11, l) },
+    { k: 'reels', e: '🎰', n: 'Extra-Walze', d: l => `${l} Walzen – mehr Walzen, größere Reihen`, cost: l => 2e6 * Math.pow(400, l - 3), max: 5, min: 3 },
+    { k: 'speed', e: '⚡', n: 'Schnellere Walzen', d: l => `Dreh alle ${slotCd().toFixed(1).replace('.', ',')} s`, cost: l => 1e4 * Math.pow(4.5, l), max: 10 },
+    { k: 'auto', e: '🤖', n: 'Hebel-Roboter', d: l => (l ? 'dreht automatisch für dich' : 'dreht automatisch, auch wenn du nicht tippst'), cost: l => 30000, max: 1 },
   ],
   scr: [
-    { k: 'val', e: '💵', n: 'Wertvollere Lose', d: l => `Preise ×${fmt(Math.pow(2.3, l))}`, cost: l => 20000 * Math.pow(3.5, l) },
-    { k: 'rate', e: '🖨️', n: 'Schnellerer Drucker', d: l => `neues Los alle ${scrCd().toFixed(1).replace('.', ',')} s`, cost: l => 25000 * Math.pow(2.4, l), max: 12 },
-    { k: 'luck', e: '🍀', n: 'Glückslose', d: l => `+${l * 6} % Gewinnchance`, cost: l => 40000 * Math.pow(3.2, l), max: 8 },
-    { k: 'auto', e: '🤖', n: 'Rubbel-Roboter', d: l => (l ? `rubbelt automatisch · Tempo ×${l}` : 'rubbelt Lose automatisch frei'), cost: l => 60000 * Math.pow(6, l), max: 5 },
+    { k: 'val', e: '💵', n: 'Wertvollere Lose', d: l => `Preise ×${fmt(Math.pow(2, l))}`, cost: l => 1e6 * Math.pow(11, l) },
+    { k: 'rate', e: '🖨️', n: 'Schnellerer Drucker', d: l => `neues Los alle ${scrCd().toFixed(1).replace('.', ',')} s`, cost: l => 1.5e6 * Math.pow(4.5, l), max: 10 },
+    { k: 'luck', e: '🍀', n: 'Glückslose', d: l => `+${l * 6} % Gewinnchance`, cost: l => 2e6 * Math.pow(7, l), max: 8 },
+    { k: 'auto', e: '🤖', n: 'Rubbel-Roboter', d: l => (l ? `rubbelt automatisch · Tempo ×${l}` : 'rubbelt Lose automatisch frei'), cost: l => 5e6 * Math.pow(20, l), max: 3 },
   ],
   plk: [
-    { k: 'val', e: '⚪', n: 'Schwerere Kugeln', d: l => `Kugelwert ×${fmt(Math.pow(2.4, l))}`, cost: l => 8e5 * Math.pow(3.6, l) },
-    { k: 'rows', e: '📏', n: 'Mehr Reihen', d: l => `${8 + l} Reihen – höhere Rand-Multiplikatoren`, cost: l => 2e6 * Math.pow(4, l), max: 6 },
-    { k: 'multi', e: '🔮', n: 'Multi-Kugel', d: l => `jeder Wurf: ${1 + l} Kugel${l ? 'n' : ''}`, cost: l => 3e6 * Math.pow(5, l), max: 5 },
-    { k: 'auto', e: '🤖', n: 'Kugel-Kanone', d: l => (l ? `wirft automatisch · alle ${(autoCd(2.2, l) / speedMul()).toFixed(1).replace('.', ',')} s` : 'wirft Kugeln automatisch'), cost: l => 2e6 * Math.pow(6, l), max: 5 },
+    { k: 'val', e: '⚪', n: 'Schwerere Kugeln', d: l => `Kugelwert ×${fmt(Math.pow(2, l))}`, cost: l => 4e8 * Math.pow(11, l) },
+    { k: 'rows', e: '📏', n: 'Mehr Reihen', d: l => `${8 + l} Reihen – höhere Rand-Multiplikatoren`, cost: l => 1e9 * Math.pow(12, l), max: 6 },
+    { k: 'multi', e: '🔮', n: 'Multi-Kugel', d: l => `jeder Wurf: ${1 + l} Kugel${l ? 'n' : ''}`, cost: l => 2e9 * Math.pow(15, l), max: 5 },
+    { k: 'auto', e: '🤖', n: 'Kugel-Kanone', d: l => (l ? `wirft automatisch · alle ${(autoCd(2.2, l) / speedMul()).toFixed(1).replace('.', ',')} s` : 'wirft Kugeln automatisch'), cost: l => 6e8 * Math.pow(15, l), max: 4 },
   ],
 };
 const diceCd = () => Math.max(0.22, 1.1 * Math.pow(0.86, S.dice.speed)) / speedMul();
@@ -280,14 +280,14 @@ function settleDice() {
   const main = D.dice.slice(0, 5).map(d => d.v), cnt = {}; main.forEach(v => (cnt[v] = (cnt[v] || 0) + 1));
   const c = Object.values(cnt).sort((a, b) => b - a);
   const combo = main.length >= 2 ? COMBOS.find(x => (x.id !== 'kniffel' || main.length >= 5) && (x.id !== 'strasse' || main.length >= 5) && x.test(c, main)) : null;
-  let v = sum * fm * (combo ? combo.m : 1) * (D.pending && D.pending.auto ? S.dice.auto : 1);
+  let v = sum * fm * (combo ? combo.m : 1);
   const got = gain(v, m.x + m.w / 2, m.y + 70, { auto: D.pending && D.pending.auto, size: combo ? 30 : 24 });
   coins(m.x + m.w / 2, m.y + 120, combo ? 14 : 5);
   if (combo) {
     D.combo = combo; D.comboT = 1.6;
-    if (combo.id === 'pasch' || combo.id === 'zweipaar') send('d2s', 'coin', combo.id === 'pasch' ? 1 : 2);
-    if (combo.id === 'drilling' || combo.id === 'full') send('d2s', 'coin', 3);
-    if (combo.id === 'vierer') send('d2s', 'coin', 4);
+    if (combo.id === 'zweipaar' || combo.id === 'drilling') send('d2s', 'coin', 1);
+    if (combo.id === 'full') send('d2s', 'coin', 2);
+    if (combo.id === 'vierer') send('d2s', 'coin', 3);
     if (combo.id === 'strasse') { send('d2r', 'ticket', 1); send('d2s', 'coin', 2); }
     if (combo.id === 'kniffel') { S.stats.kniffel++; send('d2s', 'coin', 5); send('d2r', 'ticket', 2); dust(has('kniffelstaub') ? 3 : 1, m.x + m.w / 2, m.y + 100); shake = 14; flash = 0.6; coins(m.x + m.w / 2, m.y + 120, 50); }
     if (combo.m >= 4) shake = Math.max(shake, 6);
@@ -313,19 +313,18 @@ function startSpin(free, auto) {
   return true;
 }
 function settleSpin() {
-  const m = M.slot, r = SL.res, base = 5 * Math.pow(2.2, S.slot.val);
+  const m = M.slot, r = SL.res, base = 6 * Math.pow(2, S.slot.val);
   let best = null;
   for (let si = 0; si < SYM.length; si++) { if (SYM[si].wild) continue; const k = r.filter(x => x === si || SYM[x].wild).length; if (!best || k > best.k || (k === best.k && SYM[si].v > SYM[best.si].v)) best = { si, k }; }
   if (r.every(x => SYM[x].wild)) best = { si: 5, k: r.length };
   const sv = SYM[best.si].v; let v = 0, txt = '';
-  const am = SL.isAuto ? S.slot.auto : 1;
   if (best.k >= 3) { v = sv * 10 * Math.pow(best.k - 2, 2) * base; txt = best.k >= 5 ? 'MEGA!' : best.k === 4 ? 'SUPER!' : 'GEWINN!';
     const balls = best.k - 2 + (has('roehre') ? 1 : 0); send('s2p', 'ball', balls);
     if (SYM[best.si].s === '7️⃣') { S.stats.jack++; dust(2, m.x + m.w / 2, m.y + 120); shake = 12; flash = 0.5; txt = 'JACKPOT!'; }
     coins(m.x + m.w / 2, m.y + 140, 25 + best.k * 8); shake = Math.max(shake, 5);
   } else if (best.k === 2) { v = sv * base * 0.8; }
   else v = base * 0.3;
-  gain(v * am, m.x + m.w / 2, m.y + 60, { auto: SL.isAuto, chain: SL.fromPipe, size: best.k >= 3 ? 32 : 22 });
+  gain(v, m.x + m.w / 2, m.y + 60, { auto: SL.isAuto, chain: SL.fromPipe, size: best.k >= 3 ? 32 : 22 });
   SL.win = best.k >= 2 ? { k: best.k, si: best.si, txt } : null; SL.winT = 1.5;
   if (SL.fromPipe) chainHit();
 }
@@ -354,12 +353,12 @@ function finishTicket(auto) {
   const t = RS.cur; if (!t) return; RS.cur = null; const m = M.scr;
   const cnt = {}; t.f.forEach(s => (cnt[s] = (cnt[s] || 0) + 1));
   const top = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0];
-  const base = 400 * Math.pow(2.3, S.scr.val);
+  const base = 3000 * Math.pow(2, S.scr.val);
   let v = base * 0.2, txt = 'Niete', win = false;
   if (top[1] >= 3) {
     win = true; const mult = { '💰': 8, '⭐': 12, '🍒': 6, '🔔': 7, '🍀': 10, '💎': 20 }[top[0]] * (top[1] >= 4 ? 3 : 1);
     v = base * mult; txt = `3× ${top[0]}`;
-    if (top[0] === '🍀') dust(1, m.x + m.w / 2, m.y + 150);
+    if (top[0] === '🍀' && Math.random() < 0.5) dust(1, m.x + m.w / 2, m.y + 150);
     if (top[0] === '💎') { send('r2p', 'ball', 3); txt = '💎 3 Kugeln!'; }
     else send('r2p', 'ball', 1);
     coins(m.x + m.w / 2, m.y + 200, 30); shake = Math.max(shake, 5);
@@ -388,17 +387,17 @@ function dropBall(fromPipe, auto, x) {
 }
 function settleBall(b) {
   const G = PG; let bi = 0, bd = 1e9; G.bins.forEach((bn, i) => { const d = Math.abs(bn.x - b.x); if (d < bd) { bd = d; bi = i; } });
-  const bin = G.bins[bi], base = 120 * Math.pow(2.4, S.plk.val), m = M.plk;
+  const bin = G.bins[bi], base = 2.5e4 * Math.pow(2, S.plk.val), m = M.plk;
   gain(base * bin.mult, bin.x, G.binY - 20, { auto: b.auto, chain: b.pipe, size: bin.mult >= 5 ? 30 : 20, col: bin.mult >= 5 ? '#ff3fa4' : '#22e3ff' });
   PL.hits.push({ i: bi, t: 0.5 });
-  if (bin.edge) { if (Math.random() < 0.35) dust(1, bin.x, G.binY - 40); shake = Math.max(shake, 7); coins(bin.x, G.binY, 25, '#ff3fa4'); }
+  if (bin.edge) { if (Math.random() < 0.04) dust(1, bin.x, G.binY - 40); shake = Math.max(shake, 7); coins(bin.x, G.binY, 25, '#ff3fa4'); }
   if (b.pipe) chainHit();
   void m;
 }
 
 /* ---------- Röhren-Ankunft ---------- */
 function arrive(tk) {
-  if (tk.kind === 'coin') { SL.free++; }
+  if (tk.kind === 'coin') { SL.free = Math.min(10, SL.free + 1); }
   else if (tk.kind === 'ticket') addTicket(true);
   else if (tk.kind === 'ball') { const end = tk.p.pts[tk.p.pts.length - 1]; dropBall(true, false, end[0]); }
 }
@@ -660,13 +659,13 @@ function ui() {
   $('#vChips').textContent = fmt(S.chips);
   $('#vRate').textContent = fmt(S.rate * 1) + ' / s automatisch';
   $('#dustBox').style.display = S.dust || ALLT.some(x => has(x.id)) ? '' : 'none'; $('#vDust').textContent = fmt(S.dust);
-  $('#starBox').style.display = S.stars || S.run >= PRESTIGE_MIN * 0.3 ? '' : 'none'; $('#vStars').textContent = S.stars; $('#vStarB').textContent = `+${S.stars * 20} % auf alles`;
+  $('#starBox').style.display = S.stars || S.run >= PRESTIGE_MIN / 40 ? '' : 'none'; $('#vStars').textContent = S.stars; $('#vStarB').textContent = `+${S.stars * 20} % auf alles`;
   const bo = $('#boost'); if (Date.now() < boostEnd) { bo.style.display = 'block'; bo.textContent = `🌟 HEISSE HAND ×${boostMul} · ${Math.ceil((boostEnd - Date.now()) / 1000)} s`; } else bo.style.display = 'none';
   document.querySelectorAll('#bar button').forEach(b => {
     const k = b.dataset.b;
     if (M[k]) { b.classList.toggle('lock', !owned(k) && !nextLocked(k)); b.classList.toggle('can', canBuy(k)); }
     if (k === 'tal') b.classList.toggle('can', ALLT.some(x => !has(x.id) && (!x.req || has(x.req)) && S.dust >= x.c));
-    if (k === 'bank') { b.classList.toggle('can', starsFor(S.run) > 0); b.style.display = S.run >= PRESTIGE_MIN * 0.3 || S.stars ? '' : 'none'; }
+    if (k === 'bank') { b.classList.toggle('can', starsFor(S.run) > 0); b.style.display = S.run >= PRESTIGE_MIN / 40 || S.stars ? '' : 'none'; }
     b.classList.toggle('on', sheetK === k);
   });
   if (sheetK) renderSheet(true);
@@ -677,9 +676,9 @@ function renderSheet(soft) {
     const m = M[k];
     if (!owned(k)) {
       h = `<h2>${m.e} ${m.name}<button class="x" data-x>✕</button></h2>`;
-      h += nextLocked(k) ? `<p class="d">${{ slot: 'Würfel-Paschs werfen Münzen in die Röhre – jede Münze ist ein Freispiel am Automaten.', scr: 'Druckt Lose, die du freirubbelst. Würfel-Straßen schicken Bonus-Lose hinein.', plk: 'Kugeln fallen durch Stifte in Gewinnfächer. Automat und Rubbellose schießen Kugeln hinein.' }[k]}</p><button class="big" data-unlock="${k}" ${S.chips >= unlockCost(k) ? '' : 'disabled'}>🔓 Bauen für ${fmt(unlockCost(k))} 🪙</button>` : '<p class="d">Bau zuerst die Maschine davor.</p>';
+      h += nextLocked(k) ? `<p class="d">${{ slot: 'Zwei Paare, Drilling und mehr werfen Münzen in die Röhre – jede Münze ist ein Freispiel am Automaten.', scr: 'Druckt Lose, die du freirubbelst. Würfel-Straßen schicken Bonus-Lose hinein.', plk: 'Kugeln fallen durch Stifte in Gewinnfächer. Automat und Rubbellose schießen Kugeln hinein.' }[k]}</p><button class="big" data-unlock="${k}" ${S.chips >= unlockCost(k) ? '' : 'disabled'}>🔓 Bauen für ${fmt(unlockCost(k))} 🪙</button>` : '<p class="d">Bau zuerst die Maschine davor.</p>';
     } else {
-      h = `<h2>${m.e} ${m.name}<button class="x" data-x>✕</button></h2><p class="d">${{ dice: 'Die ersten 5 Würfel zählen für Kombis (Pasch → Münze in den Automaten, Straße → Bonus-Los, Kniffel → Glücksstaub!). Weitere Würfel bringen Augen.', slot: '3 gleiche Symbole schießen Kugeln ins Plinko. 🃏 ist Joker, 7️⃣7️⃣7️⃣ gibt Glücksstaub.', scr: '3 gleiche gewinnen. 🍀 gibt Glücksstaub, 💎 schickt 3 Kugeln ins Plinko.', plk: 'Randfächer zahlen am meisten und geben manchmal Glücksstaub.' }[k]}</p>`;
+      h = `<h2>${m.e} ${m.name}<button class="x" data-x>✕</button></h2><p class="d">${{ dice: 'Die ersten 5 Würfel zählen für Kombis (Zwei Paare und mehr → Münzen in den Automaten, Straße → Bonus-Los, Kniffel → Glücksstaub!). Weitere Würfel bringen Augen.', slot: '3 gleiche Symbole schießen Kugeln ins Plinko. 🃏 ist Joker, 7️⃣7️⃣7️⃣ gibt Glücksstaub.', scr: '3 gleiche gewinnen. 🍀 gibt Glücksstaub, 💎 schickt 3 Kugeln ins Plinko.', plk: 'Randfächer zahlen am meisten und geben manchmal Glücksstaub.' }[k]}</p>`;
       h += UP[k].map(u => { const l = S[k][u.k], mx = u.max != null && l >= u.max, c = u.cost(l); return `<div class="up ${mx ? 'max' : ''}"><span class="i">${u.e}</span><div><b>${u.n} <small style="display:inline;color:var(--gold)">Stufe ${u.min ? l - u.min + 1 : l}</small></b><small>${u.d(l)}</small></div><button data-up="${k}:${u.k}" ${mx || S.chips < c ? 'disabled' : ''}>${mx ? 'Maximal' : fmt(c) + ' 🪙'}</button></div>`; }).join('');
     }
   } else if (k === 'tal') {
@@ -688,7 +687,7 @@ function renderSheet(soft) {
   } else if (k === 'bank') {
     const st = starsFor(S.run);
     h = `<h2>♻️ Bankrott<button class="x" data-x>✕</button></h2><p class="d">Alles verspielen und neu anfangen: Chips, Maschinen und Upgrades sind weg – dafür bekommst du <b>Glückssterne</b>. Jeder Stern gibt dauerhaft +20 % auf alle Gewinne. Glücksstaub und Talente bleiben.</p>
-      <div class="up"><span class="i">⭐</span><div><b>Jetzt: +${st} Glücksstern${st === 1 ? '' : 'e'}</b><small>Gewonnen in dieser Runde: ${fmt(S.run)} 🪙 · ab ${fmt(PRESTIGE_MIN)} gibt es Sterne</small></div><span></span></div>
+      <div class="up"><span class="i">⭐</span><div><b>Jetzt: +${st} Glücksstern${st === 1 ? '' : 'e'}</b><small>Gewonnen in dieser Runde: ${fmt(S.run)} 🪙 · ab ${fmt(PRESTIGE_MIN / 9)} gibt es den ersten Stern</small></div><span></span></div>
       <button class="big" data-bank ${st > 0 ? '' : 'disabled'}>Alles auf Neu! (+${st} ⭐)</button>`;
   }
   if (soft && el.dataset.h === h) return; el.dataset.h = h; const sc = el.scrollTop; el.innerHTML = h; el.scrollTop = sc;
