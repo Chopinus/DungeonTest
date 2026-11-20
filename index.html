@@ -1115,8 +1115,9 @@ function checkAch() { for (const [id, e, n, f] of ACH) if (!S.ach[id] && f(S)) {
 /* =====================================================================
    Bankrott, Herausforderungen, Umzug
    ===================================================================== */
-const PRESTIGE_MIN = 1e12;
-const starsFor = run => Math.floor(3 * Math.cbrt(run / PRESTIGE_MIN) * (has('sternf') ? 1.25 : 1) * (1 + licL('sternfang') * 0.5));
+const PRESTIGE_MIN = 1e11;
+// Sterne wachsen mit der Größenordnung der Runde (kubisch im Logarithmus) – so bleibt das Spiel auf Dauer stabil
+const starsFor = run => Math.floor(Math.pow(Math.max(0, Math.log10(Math.max(1, run) / (PRESTIGE_MIN / 20))), 3) * (has('sternf') ? 1.25 : 1) * (1 + licL('sternfang') * 0.5));
 function newRun() {
   Object.assign(S, RUN());
   S.dice.n = 1 + shopL('startw') * 2;
@@ -1224,7 +1225,7 @@ function renderSheet(soft) {
     const st = starsFor(S.run);
     h = head('♻️ Bankrott') + (S.chal ? `<p class="d">Während einer Herausforderung gibt es keinen Bankrott.</p><button class="big" data-abort>Herausforderung abbrechen</button>` :
       `<p class="d">Alles verspielen und neu anfangen: Chips, Maschinen und Upgrades sind weg – dafür gibt es <b>Glückssterne</b> für den Stern-Shop. Glücksstaub, Talente und Erfolge bleiben.</p>
-      <div class="up"><span class="i">⭐</span><div><b>Jetzt: +${st} Glücksstern${st === 1 ? '' : 'e'}</b><small>In dieser Runde: ${fmt(S.run)} 🪙 · erster Stern ab ${fmt(PRESTIGE_MIN / 27)} · mehr Chips = mehr Sterne</small></div><span></span></div>
+      <div class="up"><span class="i">⭐</span><div><b>Jetzt: +${st} Glücksstern${st === 1 ? '' : 'e'}</b><small>In dieser Runde: ${fmt(S.run)} 🪙 · erster Stern ab ${fmt(PRESTIGE_MIN / 2)} · jede Zehnerpotenz mehr bringt deutlich mehr Sterne</small></div><span></span></div>
       <button class="big" data-bank ${st > 0 ? '' : 'disabled'}>Alles auf Neu! (+${st} ⭐)</button>`) +
       `<h3>🏁 Meilensteine (verdiente Sterne: ${fmt(S.starsLife)})</h3>` + MS.map(([n, t]) => `<div class="ms ${msOK(n) ? 'done' : ''}"><b class="n">${fmt(MS_ST[n])}⭐</b><span>${msOK(n) ? '✅ ' : ''}${t}</span></div>`).join('');
   } else if (k === 'ziele') {
