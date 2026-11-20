@@ -22,7 +22,7 @@ Alles steckt in **einer Datei**: `index.html` im Browser öffnen, funktioniert a
 
 ## Fortschritt
 - **Glücksstaub und Talentbaum:** 24 Talente in 4 Ästen (Würfel, Automaten, Glück, Röhren). Staub gibt es nur für seltene Treffer.
-- **♻️ Bankrott (Ebene 1):** Ab etwa 37 Mrd. in einer Runde gibt man alles ab und bekommt Glückssterne.
+- **♻️ Bankrott (Ebene 1):** Ab 50 Mrd. in einer Runde gibt man alles ab und bekommt Glückssterne. Jede Zehnerpotenz mehr bringt deutlich mehr Sterne.
   - Die Sterne gibt man im **Stern-Shop** aus: 14 Upgrades, zum Beispiel Startvorteile, Spezialwürfel, Münzspeicher und VIP-Gäste.
   - Alle je verdienten Sterne geben zusätzlich einen dauerhaften Bonus.
 - **🏁 Meilensteine nach verdienten Sternen:**
@@ -51,8 +51,8 @@ Alles steckt in **einer Datei**: `index.html` im Browser öffnen, funktioniert a
 - **Offline-Gewinn:** bis 12 Stunden (mit Stern-Shop bis 36 Stunden).
 
 Laut Simulation mit einem Computer-Spieler, der ununterbrochen spielt:
-- erster Bankrott nach etwa 1,5 Stunden
-- Meilenstein 10 nach etwa 5 Stunden
+- erster Bankrott nach knapp 1 Stunde
+- Meilenstein 10 (Casino-Umzug) nach etwa 3 Stunden
 
 Echte Spieler brauchen ungefähr doppelt so lang. Danach geht es mit den Casinos endlos weiter.
 

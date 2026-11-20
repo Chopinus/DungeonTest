@@ -717,7 +717,7 @@ const TR = { fill: 0, open: 0, dial: 0 };
 function crackTres() {
   const m = M.tres, v = 3e22 * Math.pow(3, S.tres.val);
   TR.fill = 0; TR.open = 2.5; S.stats.tres++;
-  gain(v, m.x + m.w / 2, m.y + 60, { size: 40, col: '#ffd23f' }); dust(2, m.x + m.w / 2, m.y + 120);
+  gain(v, m.x + m.w / 2, m.y + 60, { size: 40, col: '#ffd23f' }); if (Math.random() < 0.15) dust(1, m.x + m.w / 2, m.y + 120);
   coins(m.x + m.w / 2, m.y + m.h / 2, 80); shake = 22; flash = 0.9;
 }
 
